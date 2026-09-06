@@ -1,0 +1,57 @@
+name: crm
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: crm-postgres
+    environment:
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm
+      POSTGRES_DB: crm
+      # es-CO para que ORDER BY respete tildes y ñ.
+      LANG: es_CO.utf8
+    ports:
+      # 5435 en el host: el 5432 lo ocupa un Postgres local y el 5433 está
+      # tomado a nivel de Docker en esta máquina.
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/scripts/init_extensions.sql:/docker-entrypoint-initdb.d/10-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d crm"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres_test:
+    image: postgres:16-alpine
+    container_name: crm-postgres-test
+    environment:
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm
+      POSTGRES_DB: crm_test
+    ports:
+      - "5434:5432"
+    # tmpfs: la base de tests vive en RAM y se pierde al parar. Es lo que
+    # queremos — cada suite arranca limpia y va más rápido.
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./backend/scripts/init_extensions.sql:/docker-entrypoint-initdb.d/10-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d crm_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: crm-mailhog
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # UI web — http://localhost:8025
+    logging:
+      driver: none    # mailhog es ruidoso y no aporta nada al log
+
+volumes:
+  postgres_data:
