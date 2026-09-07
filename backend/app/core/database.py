@@ -7,6 +7,7 @@ repositorios lo hace en una única transacción.
 
 from __future__ import annotations
 
+import ssl
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -27,14 +28,20 @@ def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
         settings = get_settings()
+        # asyncpg no acepta sslmode en DSN; configurar SSL en connect_args
+        connect_args = {
+            "server_settings": {"application_name": settings.app_name},
+        }
+        # Si es producción, forzar SSL
+        if settings.is_production:
+            connect_args["ssl"] = ssl.create_default_context()
         _engine = create_async_engine(
             settings.sqlalchemy_url,
             echo=settings.db_echo,
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
             pool_pre_ping=settings.db_pool_pre_ping,
-            # Sin caché de statements en pgbouncer/transaction pooling.
-            connect_args={"server_settings": {"application_name": settings.app_name}},
+            connect_args=connect_args,
         )
     return _engine
 
