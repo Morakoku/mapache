@@ -67,9 +67,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # memoria. Se reencola para que la UI no muestre progreso congelado.
     try:
         async with session_scope() as session:
-            recovered = await JobService(session).recover_stale()
-        if recovered:
-            logger.warning("stale_jobs_requeued", count=recovered)
+            if session is not None:
+                recovered = await JobService(session).recover_stale()
+                if recovered:
+                    logger.warning("stale_jobs_requeued", count=recovered)
+            else:
+                logger.info("stale_job_recovery_skipped_no_db")
     except Exception as exc:  # noqa: BLE001 - la app debe arrancar igualmente
         logger.error("stale_job_recovery_failed", error=str(exc))
 

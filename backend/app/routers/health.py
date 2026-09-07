@@ -76,7 +76,7 @@ async def _check_direct_db(db: AsyncSession) -> bool:
 @router.get("/health/ready", response_model=HealthOut)
 async def readiness(
     response: Response,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> HealthOut:
     """Readiness: ¿puede atender tráfico? Comprueba la conexión a la base de datos.
 
@@ -95,7 +95,7 @@ async def readiness(
     if await _check_supabase_rest():
         db_status = "ok"
     # 2) Fallback to direct PostgreSQL connection
-    elif await _check_direct_db(db):
+    elif db and await _check_direct_db(db):
         db_status = "ok"
 
     if db_status != "ok":

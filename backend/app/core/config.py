@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     frontend_base_url: str | None = None
 
     # ---------------------------------------------------------------- db
-    database_url: PostgresDsn
+    database_url: str | None = None  # Optional in serverless (uses PostgREST)
     db_echo: bool = False
     db_pool_size: int = 10
     db_max_overflow: int = 20
@@ -245,11 +245,16 @@ class Settings(BaseSettings):
         return self.supabase_service_role_key.get_secret_value() if self.supabase_service_role_key else None
 
     @property
-    def sqlalchemy_url(self) -> str:
-        """DSN con el driver async explícito, compatible con asyncpg."""
+    def sqlalchemy_url(self) -> str | None:
+        """DSN con el driver async explícito, compatible con asyncpg.
+        
+        Returns None if database_url is not set (serverless + PostgREST mode).
+        """
+        if not self.database_url:
+            return None
         url = str(self.database_url)
         if url.startswith("postgresql://"):
-            # asyncpg no acepta sslmode en el DSN; quitar sslmode
+            # asyncpg no acepta sslmode en DSN; quitar sslmode
             if "sslmode=" in url:
                 import re
                 url = re.sub(r"[?&]sslmode=[^&]+", "", url)

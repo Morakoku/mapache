@@ -3,13 +3,16 @@
 Una sesión por request, cerrada siempre. El commit lo hace el Service que
 posee la transacción, no el dependency: así un caso de uso que toca tres
 repositorios lo hace en una única transacción.
+
+En entornos serverless (Vercel) donde la conexión directa a PostgreSQL falla,
+se usa Supabase PostgREST API como fallback.
 """
 
 from __future__ import annotations
 
 import ssl
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmaker
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -17,18 +20,24 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
-def get_engine() -> AsyncEngine:
+def get_engine() -> AsyncEngine | None:
+    """Obtiene el engine SQLAlchemy, o None si no hay DB_URL configurada."""
     global _engine
     if _engine is None:
         settings = get_settings()
+        if not settings.sqlalchemy_url:
+            logger.info("no_database_url_postgrest_mode")
+            return None
         # asyncpg no acepta sslmode en DSN; configurar SSL en connect_args
         connect_args = {
             "server_settings": {"application_name": settings.app_name},
@@ -36,35 +45,26 @@ def get_engine() -> AsyncEngine:
         # Si es producción, forzar SSL
         if settings.is_production:
             connect_args["ssl"] = ssl.create_default_context()
-
-        # En serverless (Vercel + Supavisor transaction pooler):
-        # - Usar NullPool (el pooler externo gestiona conexiones)
-        # - Desactivar statement caching (asyncpg + transaction pooler = prepared statement conflictos)
-        poolclass = NullPool if settings.is_serverless else None
-        connect_args = connect_args or {}
-        if settings.is_serverless:
-            connect_args.update({
-                "statement_cache_size": 0,
-                "prepared_statement_cache_size": 0,
-            })
-
         _engine = create_async_engine(
             settings.sqlalchemy_url,
             echo=settings.db_echo,
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
             pool_pre_ping=settings.db_pool_pre_ping,
-            poolclass=poolclass,
             connect_args=connect_args,
         )
     return _engine
 
 
-def get_session_factory() -> async_sessionmaker[AsyncSession]:
+def get_session_factory() -> async_sessionmaker[AsyncSession] | None:
+    """Obtiene el session factory, o None si no hay engine."""
     global _session_factory
     if _session_factory is None:
+        engine = get_engine()
+        if engine is None:
+            return None
         _session_factory = async_sessionmaker(
-            bind=get_engine(),
+            bind=engine,
             class_=AsyncSession,
             expire_on_commit=False,  # poder leer el objeto después del commit
             autoflush=False,
@@ -72,13 +72,17 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     return _session_factory
 
 
-async def get_db() -> AsyncIterator[AsyncSession]:
+async def get_db() -> AsyncIterator[AsyncSession | None]:
     """Dependency de FastAPI: una sesión por request.
-
-    Hace rollback ante cualquier excepción que escape del handler. No hace
-    commit — eso es responsabilidad del Service.
+    
+    Si no hay DB configurada (modo PostgREST), devuelve None.
+    El router debe manejar este caso.
     """
     factory = get_session_factory()
+    if factory is None:
+        # Modo PostgREST - no hay sesión SQLAlchemy
+        yield None
+        return
     async with factory() as session:
         try:
             yield session
@@ -88,13 +92,15 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 
 
 @asynccontextmanager
-async def session_scope() -> AsyncIterator[AsyncSession]:
+async def session_scope() -> AsyncIterator[AsyncSession | None]:
     """Sesión fuera del ciclo de request: workers, CLI, tests.
-
-    Aquí sí hacemos commit al salir sin error, porque no hay un Service
-    superior que sea el dueño de la transacción.
+    
+    Si no hay DB configurada (modo PostgREST), devuelve None.
     """
     factory = get_session_factory()
+    if factory is None:
+        yield None
+        return
     async with factory() as session:
         try:
             yield session
