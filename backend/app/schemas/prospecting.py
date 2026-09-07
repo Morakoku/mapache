@@ -270,19 +270,19 @@ class CompanySummaryOut(APIModel):
 
     id: uuid.UUID
     name: str
-    category: str | None
-    city: str | None
-    phone: str | None
-    whatsapp: str | None
-    email: str | None
-    website: str | None
-    website_domain: str | None
-    google_maps_url: str | None
-    rating: Decimal | None
-    reviews_count: int | None
-    data_quality_score: int
-    last_extracted_at: datetime
-    last_enriched_at: datetime | None
+    category: str | None = None
+    city: str | None = None
+    phone: str | None = None
+    whatsapp: str | None = None
+    email: str | None = None
+    website: str | None = None
+    website_domain: str | None = None
+    google_maps_url: str | None = None
+    rating: Decimal | None = None
+    reviews_count: int | None = None
+    data_quality_score: int = 0
+    last_extracted_at: datetime | None = None
+    last_enriched_at: datetime | None = None
     # Verificado = tiene ficha real en Google. Se publica para que la interfaz
     # pueda distinguir un negocio comprobado de uno dado de alta a mano.
     is_verified: bool = False
@@ -291,20 +291,20 @@ class CompanySummaryOut(APIModel):
 
 
 class CompanyDetailOut(CompanySummaryOut):
-    description: str | None
-    categories: list[str]
-    address: str | None
-    state: str | None
-    country: str | None
-    postal_code: str | None
-    latitude: float | None
-    longitude: float | None
-    opening_hours: dict[str, Any] | None
-    google_ftid: str | None
-    google_place_id: str | None
-    first_extracted_at: datetime
-    created_at: datetime
-    updated_at: datetime
+    description: str | None = None
+    categories: list[str] = Field(default_factory=list)
+    address: str | None = None
+    state: str | None = None
+    country: str | None = None
+    postal_code: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    opening_hours: dict[str, Any] | None = None
+    google_ftid: str | None = None
+    google_place_id: str | None = None
+    first_extracted_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     sources: list[CompanySourceOut] = Field(default_factory=list)
     socials: list[CompanySocialOut] = Field(default_factory=list)
