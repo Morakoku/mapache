@@ -70,10 +70,13 @@ class IdempotencyService:
 
 async def require_idempotency(
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession | None, Depends(get_db)],
 ) -> None:
     """Dependencia de router: aplica idempotencia solo si hay Idempotency-Key."""
     if not get_settings().idempotency_enabled:
+        return
+    # En modo PostgREST (db=None), no aplicar idempotencia a nivel de SQLAlchemy
+    if db is None:
         return
     key = request.headers.get("idempotency-key")
     if request.method != "POST" or not key:
