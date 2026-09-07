@@ -1,0 +1,247 @@
+# MapacheCRM — Reporte Semanal
+
+**Fecha:** 2026-09-07 (SA Pacific, UTC-5)
+**Periodo reportado:** 2026-08-31 → 2026-09-06
+**Generado por:** Hermes cron (solar-pro4:free / Nous)
+**Fuente datos:** `CURRENT_STATE.md`, `/health`, `/health/ready`, vars de entorno `.env.local`
+
+---
+
+## 1. Resumen Ejecutivo
+
+Mapache CRM está en **fase de reconstrucción controlada / recuperación**. Todo el código está libre de errores de sintaxis, lint y tipo — 484 unit tests y 253 integration tests pasan — pero **no hay runtime productivo operativo y no hay datos de negocio**. El sistema acaba de pasar por un reset de credenciales y entorno; las variables SENSITIVE están en Vercel pero no persistidas en el workspace, y el runtime local (Docker + Postgres) no está disponible por un problema de conexión al engine de Docker Desktop.
+
+Estado semanal: 🔴 Sin datos operativos · 🔴 Runtime bloqueado · ✅ Código saludable
+
+---
+
+## 2. Pipeline
+
+### 2.1 Empresas
+
+| Indicador | Valor | Nota |
+|---|---|---|
+| Total empresas | 0 | Sin datos cargados |
+| Empresas con email | 0 | — |
+| Empresas con website | 0 | — |
+| Empresas con teléfono | 0 | — |
+| Empresas con social | 0 | — |
+| Empresas con señal de oportunidad | 0 | — |
+
+No hay batch de importación ni empresas manuales creadas. La ruta `POST /api/v1/companies/bulk-enrich` existe pero no se ha invocado.
+
+### 2.2 Leads / Prospectos
+
+| Indicador | Valor | Nota |
+|---|---|---|
+| Total leads | 0 | Sin datos |
+| Leads por servicio | 0 | Sin servicios creados |
+| Leads por etapa | 0 | Sin movimiento en el embudo |
+| Leads ganados | 0 | — |
+| Leads perdidos | 0 | — |
+| Leads pausados | 0 | — |
+
+El modelo de embudo (14 etapas, desde NEW hasta WON/LOST) está implementado y cubierto por tests, pero no se ha ejecutado una sola búsqueda de descubrimiento.
+
+### 2.3 Cola de Contactos (Contact Queue)
+
+| Indicador | Valor | Nota |
+|---|---|---|
+| Leads listos para contacto humano | 0 | `GET /contact-queue` devuelve lista vacía |
+| Contactos verificados (email MX OK) | 0 | — |
+| Contactos con intent clasificado | 0 | — |
+
+La cola de contacto depende de que existan leads con score ≥ umbral y contacto verificado. No hay candidatos.
+
+---
+
+## 3. Actividad Semanal
+
+### 3.1 Leads Raspados
+
+| Proveedor | Ejecuciones | Resultado |
+|---|---|---|
+| Google Maps Scraper | 0 | No ejecutado |
+| Google Places API | 0 | No ejecutado |
+| Instagram SERP | 0 | No ejecutado |
+| LinkedIn SERP | 0 | No ejecutado |
+| Scraper health canary | 0 | No ejecutado |
+
+No hubo ejecuciones de descubrimiento esta semana. El scheduler (`SCHEDULER_ENABLED`) está deshabilitado en el entorno de Vercel (`false` en `.env.local`), y localmente no hay listener porque el runtime no está levantado.
+
+### 3.2 Nuevos Leads
+
+0 nuevos leads creados esta semana.
+
+### 3.3 Enriquecimiento
+
+| Tipo | Ejecuciones | Completadas | Fallidas |
+|---|---|---|---|
+| Enriquecimiento individual | 0 | 0 | 0 |
+| Enriquecimiento bulk | 0 | 0 | 0 |
+
+### 3.4 Secuencias y Emails
+
+| Indicador | Valor | Nota |
+|---|---|---|
+| Emails enviados | 0 | Sin cuenta de correo configurada (SMTP/Gmail/Graph) |
+| Emails entregados | 0 | — |
+| Emails abiertos (real, sin bot) | 0 | — |
+| Clicks | 0 | — |
+| Respuestas | 0 | — |
+| Rebotes | 0 | — |
+| Unsubscribes | 0 | — |
+| Secuencias activas | 0 | Sin secuencias creadas |
+| Seguimientos pendientes | 0 | Sin programar |
+| Plantillas creadas | 0 | — |
+
+El módulo de correo está implementado (Gmail OAuth, Microsoft Graph, SMTP) pero **no hay cuenta de envío configurada**. El warm-up (20 → 100 emails/día en 22 días), el control de rebotes, la lista de no contactar y el List-Unsubscribe RFC 8058 están implementados pero inactivos.
+
+### 3.5 Inbox Sync
+
+| Indicador | Valor | Nota |
+|---|---|---|
+| Sincronizaciones de inbox | 0 | Sin cuenta conectada |
+| Respuestas clasificadas | 0 | — |
+| Respuestas detectadas como auto-respuesta | 0 | — |
+| Rebotes duros detectados | 0 | — |
+
+---
+
+## 4. Distribución por Etapa (Kanban)
+
+Etapa actual del embudo — **vacío**:
+
+| Etapa | Leads | % del total |
+|---|---|---|
+| New (NEW) | 0 | — |
+| Qualified (QUALIFIED) | 0 | — |
+| Contact Found (CONTACT_FOUND) | 0 | — |
+| Contacted (CONTACTED) | 0 | — |
+| Opened (OPENED) | 0 | — |
+| Replied (REPLIED) | 0 | — |
+| Conversation (CONVERSATION) | 0 | — |
+| Interested (INTERESTED) | 0 | — |
+| Meeting (MEETING) | 0 | — |
+| Opportunity (OPPORTUNITY) | 0 | — |
+| Proposal (PROPOSAL) | 0 | — |
+| Negotiation (NEGOTIATION) | 0 | — |
+| Won (WON) | 0 | — |
+| Lost (LOST) | 0 | — |
+
+**Observación:** la distribución es informativa esta semana porque no hay datos. Una vez exista al menos una búsqueda ejecutada y enriquecida, este bloque debe llenarse automáticamente desde `/metrics/funnel`.
+
+---
+
+## 5. Métricas Públicas (API check)
+
+| Endpoint | Estado | Valor |
+|---|---|---|
+| `GET /health` | ✅ 200 | status: ok · environment: production · database: not_checked · version: 0.1.0 |
+| `GET /health/ready` | ✅ 200 | status: ok · database: ok · version: 0.1.0 |
+| `GET /docs` | ❌ 404 | Swagger deshabilitado en producción (`docs_url=None` cuando `is_production=True`) |
+| `GET /api/v1/metrics/overview` | 🔴 400 | `SERVICE_TOKEN_MISSING` — requiere Bearer HMAC firmado |
+| `GET /api/v1/metrics/funnel` | 🔴 400 | `SERVICE_TOKEN_MISSING` |
+
+**Interpretación:** la app está desplegada, responde salud y está lista (Postgres reachable desde Vercel). El Swagger está oculto en producción (intencional). Los endpoints de métricas requieren service-to-service auth (LOOP-16), que no está configurado en el workspace.
+
+---
+
+## 6. Alerts
+
+### 🔴 ALERTA — Runtime bloqueado (Docker)
+El estado del sistema registra Docker daemon sin conexión al engine `dockerDesktopLinuxEngine`. Esto bloquea el Postgres local (puerto 5435 dev / 5434 test), el Mailhog (8025/1025), y cualquier ejecución local de la API. Sin postgreSQL local, no hay `make dev`, no hay scheduler, no hay workers.
+
+**Impacto:** cero actividad de scraping, enriquecimiento, envío, seguimiento ni lectura de inbox esta semana.
+
+### 🔴 ALERTA — Sin credenciales de servicio en workspace
+`SERVICE_TOKEN_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SERVICE_TRUSTED_CLIENT_IDS`, `PUBLIC_BASE_URL` y `FRONTEND_BASE_URL` están en Vercel pero **no persistidos en el workspace** (`.env.local` los tiene como `[SENSITIVE]`). Por eso:
+- No se puede firmar un token HMAC válido para consultar las métricas.
+- No se puede ejecutar Hermes (dispatch requiere `hermes.dispatch` + token firmado).
+- No hay forma de generar el reporte desde la API y no desde el runtime local.
+
+### 🔴 ALERTA — Scheduler deshabilitado en Vercel
+`SCHEDULER_ENABLED=false` en el entorno de producción despliegue. El scheduler interno (follow-up tick cada 15 min, inbox sync cada 10 min) no corre. Si se quiere actividad automática, requiere:
+- Habilitar `SCHEDULER_ENABLED=true` **en una sola instancia** (documentación explícita: si hay dos instancias con scheduler activo, los ticks se duplican).
+- O configurar cron externo: Vercel Cron (`/cron/followup-tick`) o systemd timer (self-hosted).
+
+### 🔴 ALERTA — Sin cuenta de correo configurada
+El módulo de email requiere SMTP o OAuth (Gmail/Microsoft). Sin cuenta, no hay posibilidad de enviar, ni de sincronizar respuestas. El formulario del sitio público (`veyrasoluciones.com/api/lead`) está en modo REVIEW — acepta el lead pero no envía email ni lo escribe a producción.
+
+### 🟡 AVISO — Backend de cola en proceso
+`JOB_QUEUE_BACKEND=inprocess` (InProcessQueue, asyncio). Funciona para MVP y una sola instancia; no escala a múltiples workers ni sobrevive a reinicios. El documento de operación marca explícitamente que cuando el volumen lo pida, migrar a `arq` + Redis requiere cambiar una línea en `app/core/container.py`.
+
+### 🟡 AVISO — Frontend sin tests
+El frontend de Mapache (13 pantallas) no tiene tests unitarios ni de integración registrados. El backend sí (737 tests totales).
+
+---
+
+## 7. Recomendaciones
+
+### R1 — Prioridad 1: Habilitar runtime local (esta semana)
+- Verificar/reconectar el engine de Docker Desktop (linux engine).
+- `cd backend && make up && make migrate && make dev`.
+- Levantar la API en localhost:8000 y confirmar que `/health/ready` devuelve `database: ok` desde local.
+- Sin esto no hay nada más que hacer.
+
+### R2 — Prioridad 1: Descargar y persistir variables SENSITIVE
+- Desde Vercel CLI o panel: exportar `SERVICE_TOKEN_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PUBLIC_BASE_URL`, `FRONTEND_BASE_URL`, y `SERVICE_TRUSTED_CLIENT_IDS` al workspace (ej. `.env.local` extendido o gestor de secretos).
+- Con `SERVICE_TOKEN_KEY` en el workspace, se puede generar un token HMAC firmado y consultar `/api/v1/metrics/overview` y `/api/v1/metrics/funnel` desde Hermes.
+- Guardar `SERVICE_TOKEN_KEY` fuera del repo (ya está en `.env.local` como `[SENSITIVE]`, solo falta preservar el valor real).
+
+### R3 — Prioridad 2: Ejecutar primer ciclo de descubrimiento
+Una vez que la API esté corriendo localmente:
+1. Crear un servicio de prueba (ej. consultoría comercial, o el servicio que se quiera vender).
+2. Crear búsqueda con proveedor `google_maps_scraper` o `google_places_api`.
+3. `POST /searches/{id}/run` → job `DISCOVERY` → company rows → `ENRICHMENT` → `SCORING`.
+4. Verificar que `/metrics/overview` devuelve empresas, leads y actividad real.
+
+**Nota:** ejecutar solo con `DISCOVERY`, `ENRICHMENT` y `FOLLOWUP_TICK` — nunca `SEND_BATCH` desde Hermes (bloqueo deliberado).
+
+### R4 — Prioridad 2: Configurar cuenta de envío
+- Empezar con SMTP si no hay OAuth configurado.
+- Verificar SPF/DKIM/DMARC en el dominio de envío **antes** del primer envío.
+- Respetar la curva de warm-up (20 → 100 emails/día en 22 días).
+- El endpoint `GET /settings/oauth-providers` devuelve lista vacía mientras no haya credenciales; la interfaz debe ofrecer solo SMTP en ese caso.
+
+### R5 — Prioridad 3: Conectar Hermes como agente programado
+- Con `SERVICE_TOKEN_KEY` disponible, generar token HMAC (`hermes` client id, scopes mínimos `hermes.dispatch + hermes.jobs.read`).
+- Configurar cron que dispare `DISCOVERY` semanalmente sobre búsquedas activas y `FOLLOWUP_TICK` frecuente.
+- El token requiere refresco por TTL (5 minutos por defecto) o clock skew — diseñar regeneración automática.
+
+### R6 — Prioridad 3: Habilitar scheduler en Vercel o pasar a cron externo
+- Si el deployment de Vercel puede ejecutar el scheduler interno (single instance), set `SCHEDULER_ENABLED=true` y verificar que no hay segunda instancia.
+- Alternativa recomendada para producción estable: Vercel Cron (`/cron/followup-tick` cada 15 min, `/cron/scraper-health` diario 08:00) + systemd timer si es self-hosted.
+
+### R7 — Prioridad menor: Persistir estado semanal
+- Crear `memory/` en el repo (o fuera, donde sea persistente) y escribir `state.json` con contadores semanales y `report_YYYYMMDD.txt`.
+- Esto da un historial acumulativo y evita depender solo de memoria episódica.
+- Dado que no hay runtime con datos, el primer reporte es manual. A partir de la primera actividad real, el reporte debe generarse consultando `/metrics/overview`, `/metrics/funnel`, `/metrics/attention`, `/metrics/leads-timeseries` y `/api/v1/leads/segments/summary`.
+
+---
+
+## 8. Estado de los demás componentes (resumen)
+
+| Componente | Semanal |
+|---|---|
+| Guaki (marketplace) | ⚠️ Preview canónico live, sin credenciales Supabase en workspace, sin datos localmente |
+| Veyra Site | ✅ Live en veyrasoluciones.com, formulario en modo REVIEW |
+| Hermes orquestador | 🔴 No ejecutándose, bridge Mapache bloqueado |
+| MCP Servers | ❓ No verificado |
+| Supabase (Guaki) | ✅ Remoto activo, 🔴 sin enlace local, sin credenciales en workspace |
+| Vercel | ✅ Live deploys, ⚠️ preview canónico no promovido a producción |
+
+---
+
+## 9. Próximos pasos inmediatos (next 7 days)
+
+1. Reparar Docker Desktop engine → `make up && make migrate && make dev` en `backend/`.
+2. Preservar secretos reales desde Vercel al workspace (fuera del repo).
+3. Ejecutar búsqueda piloto + enriquecimiento + scoring contra Postgres local.
+4. Configurar cuenta SMTP de prueba y verificar entregabilidad + tracking.
+5. Generar token HMAC de Hermes y programar primer dispatch semanal de descubrimiento.
+6. Escribir `memory/report_20260907.txt` (este archivo) y reiniciar contadores semanales para la siguiente iteración.
+
+---
+
+*Fin del reporte semanal. Generado el 2026-09-07 desde CURRENT_STATE.md y verificación de métricas públicas.*

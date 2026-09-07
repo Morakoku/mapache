@@ -1,0 +1,167 @@
+{
+  "generated_at": "2026-09-07T00:00:00-05:00",
+  "period": {
+    "start": "2026-08-31",
+    "end": "2026-09-06"
+  },
+  "companies": {
+    "total": 0,
+    "with_email": 0,
+    "with_website": 0,
+    "with_phone": 0,
+    "with_social": 0,
+    "with_opportunity_signal": 0
+  },
+  "leads": {
+    "total": 0,
+    "new_this_week": 0,
+    "scraped_this_week": 0,
+    "stages": {
+      "NEW": 0,
+      "QUALIFIED": 0,
+      "CONTACT_FOUND": 0,
+      "CONTACTED": 0,
+      "OPENED": 0,
+      "REPLIED": 0,
+      "CONVERSATION": 0,
+      "INTERESTED": 0,
+      "MEETING": 0,
+      "OPPORTUNITY": 0,
+      "PROPOSAL": 0,
+      "NEGOTIATION": 0,
+      "WON": 0,
+      "LOST": 0
+    },
+    "by_status": {
+      "OPEN": 0,
+      "WON": 0,
+      "LOST": 0,
+      "DISQUALIFIED": 0,
+      "PAUSED": 0
+    },
+    "won_value": 0,
+    "contact_queue_ready": 0
+  },
+  "weekly_activity": {
+    "leads_scraped": 0,
+    "new_leads": 0,
+    "companies_discovered": 0,
+    "companies_enriched": 0,
+    "emails_sent": 0,
+    "emails_delivered": 0,
+    "opened": 0,
+    "clicked": 0,
+    "replied": 0,
+    "bounced": 0,
+    "unsubscribed": 0,
+    "sequences_active": 0,
+    "followups_pending": 0,
+    "inbox_syncs": 0,
+    "responses_classified": 0,
+    "seeds_unsubscribe": 0,
+    "templates_created": 0,
+    "scraper_health_runs": 0
+  },
+  "scraper_runs_this_week": {
+    "google_maps_scraper": 0,
+    "google_places_api": 0,
+    "instagram_serp": 0,
+    "linkedin_serp": 0,
+    "scraper_health_canary": 0
+  },
+  "alerts": [
+    {
+      "level": "🔴",
+      "title": "Runtime bloqueado (Docker)",
+      "detail": "Docker daemon no conecta con dockerDesktopLinuxEngine. Postgres local (5435 dev / 5434 test), Mailhog y la API no pueden levantarse.",
+      "impact": "Cero actividad de scraping, enriquecimiento, envío, seguimiento e inbox esta semana.",
+      "fix": "Revisar/reconectar engine de Docker Desktop. Luego: cd backend && make up && make migrate && make dev."
+    },
+    {
+      "level": "🔴",
+      "title": "Sin credenciales de servicio en workspace",
+      "detail": "SERVICE_TOKEN_KEY, SUPABASE keys, PUBLIC_BASE_URL, FRONTEND_BASE_URL están en Vercel pero no persistidos en el workspace (.env.local los tiene como [SENSITIVE]). No se puede firmar token HMAC ni consultar métricas.",
+      "impact": "Imposible consultar /api/v1/metrics/overview ni /api/v1/metrics/funnel, e imposible ejecutar Hermes (dispatch requiere hermes.dispatch + token firmado).",
+      "fix": "Exportar los valores reales desde Vercel al workspace (fuera del repo) y conservar SERVICE_TOKEN_KEY para regenerar tokens HMAC."
+    },
+    {
+      "level": "🔴",
+      "title": "Scheduler deshabilitado en Vercel",
+      "detail": "SCHEDULER_ENABLED=false en el entorno desplegado. El follow-up tick (15 min) e inbox sync (10 min) no corren.",
+      "impact": "Sin ejecución periódica automática en producción desplegada.",
+      "fix": "Habilitar SCHEDULER_ENABLED=true en una sola instancia, o usar Vercel Cron / systemd timer (sección 5.3 de AGENT_CRON_SETUP.md)."
+    },
+    {
+      "level": "🔴",
+      "title": "Sin cuenta de correo configurada",
+      "detail": "Módulo de email implementado (Gmail OAuth, Microsoft Graph, SMTP) pero sin cuenta activa. Sitio público formulario en modo REVIEW (202 sin enviar).",
+      "impact": "No hay envíos, tracking, respuestas ni sincronización de inbox.",
+      "fix": "Configurar SMTP primero si no hay OAuth. Verificar SPF/DKIM/DMARC antes del primer envío. Seguir curva de warm-up (20 → 100/día en 22 días)."
+    },
+    {
+      "level": "🟡",
+      "title": "Cola inprocess (no persistente)",
+      "detail": "JOB_QUEUE_BACKEND=inprocess. Los jobs sobreviven en memoria durante la vida de la API; se pierden en reinicio.",
+      "impact": "Volumen bajo actualmente no afectado; no escala a múltiples workers ni sobrevive a reinicios.",
+      "fix": "Cuando el volumen lo pida (>100 emails/día or múltiples workers), migrar a arq + Redis cambiando una línea en app/core/container.py."
+    },
+    {
+      "level": "🟡",
+      "title": "Frontend sin tests",
+      "detail": "El frontend de Mapache (13 pantallas) no tiene tests registrados. El backend tiene 737 tests.",
+      "impact": "Baja cobertura en la capa de UI.",
+      "fix": "Añadir tests de integración sobre las 13 pantallas antes del primer envío a producción con datos reales."
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": 1,
+      "action": "Habilitar runtime local",
+      "detail": "Reparar Docker Desktop engine → make up && make migrate && make dev en backend/. Confirmar /health/ready con database: ok desde local.",
+      "why": "Sin Postgres local no hay actividad de ningún módulo."
+    },
+    {
+      "priority": 1,
+      "action": "Persistir secretos reales desde Vercel",
+      "detail": "Descargar SERVICE_TOKEN_KEY, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, PUBLIC_BASE_URL, FRONTEND_BASE_URL, SERVICE_TRUSTED_CLIENT_IDS al workspace (fuera del repo).",
+      "why": "Permite consultar métricas, ejecutar Hermes, y operar el CRM."
+    },
+    {
+      "priority": 2,
+      "action": "Ejecutar primer ciclo de descubrimiento",
+      "detail": "Con la API local corriendo: crear servicio de prueba, crear búsqueda (google_maps_scraper o google_places_api), POST /searches/{id}/run → company rows → ENRICHMENT → SCORING. Verificar que /metrics/overview devuelve datos reales.",
+      "why": "El CRM necesita al menos una búsqueda para llenar pipeline, embudo y alertas."
+    },
+    {
+      "priority": 2,
+      "action": "Configurar cuenta de envío",
+      "detail": "Empezar con SMTP si no hay OAuth. Verificar SPF/DKIM/DMARC antes del primer envío. Respetar warm-up (20 → 100/día en 22 días).",
+      "why": "Sin cuenta de correo, no hay prospección activa ni métricas de email."
+    },
+    {
+      "priority": 3,
+      "action": "Habilitar Hermes como agente semanal",
+      "detail": "Con SERVICE_TOKEN_KEY disponible, generar token HMAC (client_id=hermes, scopes mínimos hermes.dispatch + hermes.jobs.read). Configurar cron que dispare DISCOVERY semanalmente y FOLLOWUP_TICK frecuente.",
+      "why": "Automatiza el ciclo de descubrimiento y seguimiento sin intervención manual."
+    },
+    {
+      "priority": 3,
+      "action": "Habilitar scheduler en Vercel o migrar a cron externo",
+      "detail": "Opción A: SCHEDULER_ENABLED=true en una sola instancia. Opción B: Vercel Cron (/cron/followup-tick cada 15 min, /cron/scraper-health diario 08:00) + systemd timer si self-hosted.",
+      "why": "Da actividad automática estable en producción."
+    },
+    {
+      "priority": 3,
+      "action": "Persistir estado semanal en memory/",
+      "detail": "Crear state.json con contadores semanales y report_YYYYMMDD.txt en memory/. Primer reporte manual (este). A partir de la primera actividad real, generar consultando /metrics/overview, /metrics/funnel, /metrics/attention, /metrics/leads-timeseries y /api/v1/leads/segments/summary.",
+      "why": "Da historial acumulativo y evita depender solo de memoria episódica."
+    }
+  ],
+  "health_checks": {
+    "health": {"status": "ok", "environment": "production", "database": "not_checked", "version": "0.1.0"},
+    "health_ready": {"status": "ok", "environment": "production", "database": "ok", "version": "0.1.0"},
+    "docs": {"status": "disabled_in_production"}
+  },
+  "counters_reset": true,
+  "next_report_due": "2026-09-14"
+}

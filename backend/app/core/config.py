@@ -86,7 +86,7 @@ class Settings(BaseSettings):
     # (lo exige el test 9 de LOOP-07). En claro nunca se expone el valor de la
     # clave: `service_token_key` es `SecretStr` y aquí solo guardamos el nombre
     # de la identidad, no su secreto.
-    service_trusted_client_ids: str = "hermes"
+    service_trusted_client_ids: str = "hermes,guaki"
     # L2 (LOOP-14): scopes concedidos a la identidad `hermes` (lista separada
     # por comas). MÍNIMO privilegio del contrato: hermes.dispatch + hermes.jobs.read.
     # Cualquier otro scope (crm.read, scrape.run, jobs.read, mail.send, admin…)
