@@ -10,10 +10,12 @@ from __future__ import annotations
 from app.core.enums import SerpProvider, SourceType
 from app.core.exceptions import ConfigurationError
 from app.scrapers.base import DiscoveryProvider
-from app.scrapers.google_maps.browser import BrowserConfig
-from app.scrapers.google_maps.provider import GoogleMapsScraperProvider
-from app.scrapers.google_places_api import GooglePlacesApiProvider
-from app.scrapers.social_serp import build_serp_provider
+
+# Lazy imports to avoid playwright in serverless
+# from app.scrapers.google_maps.browser import BrowserConfig
+# from app.scrapers.google_maps.provider import GoogleMapsScraperProvider
+# from app.scrapers.google_places_api import GooglePlacesApiProvider
+# from app.scrapers.social_serp import build_serp_provider
 
 GOOGLE_MAPS_SCRAPER = "google_maps_scraper"
 GOOGLE_PLACES_API = "google_places_api"
@@ -42,7 +44,7 @@ def source_type_for(provider_name: str) -> SourceType:
 def build_provider(
     provider_name: str,
     *,
-    browser_config: BrowserConfig | None = None,
+    browser_config: Any = None,  # BrowserConfig | None - avoid import
     concurrency: int = 2,
     google_places_key: str | None = None,
     serp_provider: SerpProvider = SerpProvider.GOOGLE_CSE,
@@ -55,19 +57,44 @@ def build_provider(
     clave de Places" es un problema del usuario, no un error interno, y la UI
     debe poder decírselo tal cual.
     """
+    # Lazy imports to avoid playwright in serverless
     if provider_name == GOOGLE_MAPS_SCRAPER:
+        try:
+            from app.scrapers.google_maps.browser import BrowserConfig
+            from app.scrapers.google_maps.provider import GoogleMapsScraperProvider
+        except ImportError as e:
+            raise ConfigurationError(
+                f"Proveedor '{provider_name}' requiere playwright (no disponible en serverless). "
+                f"Usa APIFY, SERPAPI o GOOGLE_PLACES_API. Error: {e}",
+                code="HEAVY_DEPENDENCY_REQUIRED",
+            )
         return GoogleMapsScraperProvider(config=browser_config, concurrency=concurrency)
 
     if provider_name == GOOGLE_PLACES_API:
+        try:
+            from app.scrapers.google_places_api import GooglePlacesApiProvider
+        except ImportError as e:
+            raise ConfigurationError(
+                f"Proveedor '{provider_name}' no disponible. Error: {e}",
+                code="PROVIDER_IMPORT_FAILED",
+            )
         if not google_places_key:
             raise ConfigurationError(
                 "El proveedor Google Places requiere una clave de API. "
-                "Añádela en Configuración o cambia a 'google_maps_scraper'.",
+                "Añádela en Configuración o cambia a 'api'/'serpapi'.",
                 code="MISSING_PLACES_API_KEY",
             )
         return GooglePlacesApiProvider(api_key=google_places_key)
 
     if provider_name in (INSTAGRAM_SERP, LINKEDIN_SERP):
+        try:
+            from app.scrapers.social_serp import build_serp_provider
+        except ImportError as e:
+            raise ConfigurationError(
+                f"Proveedor '{provider_name}' requiere playwright. "
+                f"Usa APIFY o SERPAPI en serverless. Error: {e}",
+                code="HEAVY_DEPENDENCY_REQUIRED",
+            )
         return build_serp_provider(
             "instagram" if provider_name == INSTAGRAM_SERP else "linkedin",
             provider=serp_provider,
