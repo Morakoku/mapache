@@ -226,6 +226,15 @@ class Settings(BaseSettings):
         return self.environment == "production"
 
     @property
+    def use_postgrest(self) -> bool:
+        """Usar PostgREST HTTP API en vez de PostgreSQL directo.
+        
+        En Vercel serverless, la conexión directa a PostgreSQL falla
+        (IPv4 vs IPv6, pooler limits). PostgREST funciona vía HTTP.
+        """
+        return self.is_production
+
+    @property
     def supabase_anon_key_value(self) -> str | None:
         """Get the anon key as a plain string."""
         return self.supabase_anon_key.get_secret_value() if self.supabase_anon_key else None

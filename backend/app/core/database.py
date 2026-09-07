@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
 
@@ -35,12 +36,25 @@ def get_engine() -> AsyncEngine:
         # Si es producción, forzar SSL
         if settings.is_production:
             connect_args["ssl"] = ssl.create_default_context()
+
+        # En serverless (Vercel + Supavisor transaction pooler):
+        # - Usar NullPool (el pooler externo gestiona conexiones)
+        # - Desactivar statement caching (asyncpg + transaction pooler = prepared statement conflictos)
+        poolclass = NullPool if settings.is_serverless else None
+        connect_args = connect_args or {}
+        if settings.is_serverless:
+            connect_args.update({
+                "statement_cache_size": 0,
+                "prepared_statement_cache_size": 0,
+            })
+
         _engine = create_async_engine(
             settings.sqlalchemy_url,
             echo=settings.db_echo,
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
             pool_pre_ping=settings.db_pool_pre_ping,
+            poolclass=poolclass,
             connect_args=connect_args,
         )
     return _engine
