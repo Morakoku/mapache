@@ -42,20 +42,20 @@ async def _check_supabase_rest() -> bool:
 
     This works in serverless environments (Vercel) where direct PostgreSQL
     connections fail due to IPv4/IPv6 mismatch or pooler limits.
+    Uses service_role key (required for PostgREST) and tests alembic_version table.
     """
     settings = get_settings()
-    if not settings.supabase_url or not settings.supabase_anon_key_value:
+    if not settings.supabase_url or not settings.supabase_service_role_key_value:
         return False
 
-    rest_url = settings.supabase_url.rstrip("/") + "/rest/v1/"
+    rest_url = settings.supabase_url.rstrip("/") + "/rest/v1/alembic_version?select=version_num&limit=1"
     headers = {
-        "apikey": settings.supabase_anon_key_value,
-        "Authorization": f"Bearer {settings.supabase_anon_key_value}",
+        "apikey": settings.supabase_service_role_key_value,
+        "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
     }
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            # GET /rest/v1/ returns the root endpoint (list of tables) — 200 on success
             resp = await client.get(rest_url, headers=headers)
             return resp.status_code == 200
     except Exception as exc:
