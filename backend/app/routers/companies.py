@@ -57,6 +57,10 @@ async def list_companies(
     size: int = Query(default=50, ge=1, le=200),
     db: AsyncSession | None = Depends(get_db),
 ) -> Page[CompanySummaryOut]:
+    """Lista empresas con filtros opcionales.
+    
+    En serverless (Vercel) sin DB directa, usa PostgREST HTTP.
+    """
     from app.core.config import get_settings
 
     settings = get_settings()
