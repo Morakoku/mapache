@@ -116,6 +116,7 @@ class MailProviderType(StrEnum):
     GMAIL = "GMAIL"
     MICROSOFT = "MICROSOFT"
     SMTP = "SMTP"
+    MAILGUN = "MAILGUN"
 
 
 class AccountStatus(StrEnum):

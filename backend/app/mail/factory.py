@@ -18,6 +18,7 @@ from app.mail import oauth
 from app.mail.base import MailAuthError, MailProvider
 from app.mail.gmail import GmailProvider
 from app.mail.graph import GraphProvider
+from app.mail.mailgun import MailgunProvider
 from app.mail.smtp import SmtpProvider
 from app.models.email_account import EmailAccount
 
@@ -32,6 +33,8 @@ async def provider_for(account: EmailAccount, session: AsyncSession | None = Non
     """Instancia el proveedor de una cuenta, renovando el token si toca."""
     if account.provider is MailProviderType.SMTP:
         return SmtpProvider(account)
+    if account.provider is MailProviderType.MAILGUN:
+        return MailgunProvider(account)
 
     token = await ensure_fresh_token(account, session)
 
