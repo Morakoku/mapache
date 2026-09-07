@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     db_max_overflow: int = 20
     db_pool_pre_ping: bool = True
 
+    # ---------------------------------------------------------------- Supabase REST API (serverless fallback)
+    # Project URL from Supabase Dashboard → Settings → API (e.g., https://xyz.supabase.co)
+    supabase_url: str | None = None
+    # Anon (public) key from Supabase Dashboard → Settings → API
+    supabase_anon_key: SecretStr | None = None
+    # Service role key (bypasses RLS) - ONLY for server-side admin operations
+    supabase_service_role_key: SecretStr | None = None
+
     # ---------------------------------------------------------------- seguridad
     # Clave maestra para cifrar credenciales en BD (Fernet, 32 bytes url-safe b64).
     # Generar con:
@@ -84,6 +92,9 @@ class Settings(BaseSettings):
     # Cualquier otro scope (crm.read, scrape.run, jobs.read, mail.send, admin…)
     # NO es grantable a una identidad de servicio → DENY.
     hermes_scopes: str = "hermes.dispatch,hermes.jobs.read"
+    # L2 (LOOP-23): scopes concedidos a la identidad `guaki` (lista separada
+    # por comas). MÍNIMO privilegio: guaki.read (prospectos, funnel, links).
+    guaki_scopes: str = "guaki.read"
     # Strict mode is required before production can accept service jobs.
     tenant_isolation_enforced: bool = False
 
@@ -184,13 +195,20 @@ class Settings(BaseSettings):
     def service_scopes_for(self, client_id: str) -> frozenset[str]:
         """Scopes concedidos a una identidad de servicio.
 
-        Solo `hermes` tiene identidad hoy; cualquier otra identidad queda sin
-        scopes (frozenset vacío) y por tanto se le deniegan todas las
-        operaciones protegidas en L2.
+        Solo `hermes` y `guaki` tienen identidad hoy; cualquier otra identidad
+        queda sin scopes (frozenset vacío) y por tanto se le deniegan todas
+        las operaciones protegidas en L2.
         """
         if client_id == "hermes":
             return self.hermes_scope_set
+        if client_id == "guaki":
+            return self.guaki_scope_set
         return frozenset()
+
+    @property
+    def guaki_scope_set(self) -> frozenset[str]:
+        """Scopes concedidos al cliente `guaki` (parsea `guaki_scopes`)."""
+        return frozenset(p.strip() for p in self.guaki_scopes.split(",") if p.strip())
 
     @property
     def trusted_client_ids(self) -> frozenset[str]:
@@ -208,21 +226,34 @@ class Settings(BaseSettings):
         return self.environment == "production"
 
     @property
+    def supabase_anon_key_value(self) -> str | None:
+        """Get the anon key as a plain string."""
+        return self.supabase_anon_key.get_secret_value() if self.supabase_anon_key else None
+
+    @property
+    def supabase_service_role_key_value(self) -> str | None:
+        """Get the service role key as a plain string."""
+        return self.supabase_service_role_key.get_secret_value() if self.supabase_service_role_key else None
+
+    @property
     def sqlalchemy_url(self) -> str:
         """DSN con el driver async explícito, compatible con asyncpg."""
         url = str(self.database_url)
         if url.startswith("postgresql://"):
-            # asyncpg no acepta sslmode en el DSN; usar ssl=true o quitarlo
-            # Vercel + Supabase pooler: quitar sslmode, asyncpg usa SSL por defecto
+            # asyncpg no acepta sslmode en el DSN; quitar sslmode
             if "sslmode=" in url:
-                # Remove sslmode parameter
                 import re
                 url = re.sub(r"[?&]sslmode=[^&]+", "", url)
-                # Fix potential double ? or trailing &
                 url = re.sub(r"\?&", "?", url)
                 url = url.rstrip("&?")
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
         return url
+
+    @property
+    def is_serverless(self) -> bool:
+        """True si corremos en Vercel/serverless (pooler transaccional)."""
+        url = str(self.database_url)
+        return "pooler.supabase.com:6543" in url or "pooler.supabase.com:5432" in url
 
     @property
     def alembic_url(self) -> str:

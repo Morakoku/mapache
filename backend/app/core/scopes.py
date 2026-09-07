@@ -29,9 +29,17 @@ from functools import lru_cache
 SCOPE_DISPATCH_HERMES = "hermes.dispatch"
 SCOPE_HERMES_JOBS_READ = "hermes.jobs.read"
 
-# Scopes que UNA IDENTIDAD DE SERVICIO puede tener. Whitelist estricta: solo el
+# --------------------------------------------------------- scopes de contrato (Guaki)
+
+SCOPE_GUAKI_READ = "guaki.read"
+
+# Scopes que UNA IDENTIDAD DE SERVICIO puede tener. Whititelist estricta: solo el
 # contrato. Fuera de aquí, una identidad queda DENY.
-PERMITTED_SCOPES = frozenset({SCOPE_DISPATCH_HERMES, SCOPE_HERMES_JOBS_READ})
+PERMITTED_SCOPES = frozenset({
+    SCOPE_DISPATCH_HERMES,
+    SCOPE_HERMES_JOBS_READ,
+    SCOPE_GUAKI_READ,
+})
 
 # Scopes PROHIBIDOS para identidades de servicio: si una identidad los trae en
 # su set concedido, la identidad se rechaza (403) con motivo FORBIDDEN.
@@ -93,14 +101,19 @@ def validate_scope_set(scopes: Set[str]) -> str | None:
 
 # ---------------------------------------------------endpoint → scope (contrato, explícito)
 
-# Mapa de autorización del CONTRATO Hermes (LOOP-09). Solo estas dos
-# operaciones existen para identidades de servicio; cualquier otra ruta de los
-# 141 endpoints no está declarada → scope_for devuelve None → DENY (403).
+# Mapa de autorización del CONTRATO Hermes (LOOP-09) + Guaki (LOOP-23).
+# Solo estas operaciones existen para identidades de servicio; cualquier otra
+# ruta de los 141 endpoints no está declarada → scope_for devuelve None → DENY (403).
 # Los templates usan la misma forma que las rutas de FastAPI (`{param}`).
 _ENDPOINT_SCOPE_MAP = frozenset(
     {
         ("POST", "/api/v1/hermes/dispatch", SCOPE_DISPATCH_HERMES),
         ("GET", "/api/v1/hermes/jobs/{job_id}", SCOPE_HERMES_JOBS_READ),
+        # Guaki contract: read prospects, funnel, and link operations
+        ("GET", "/api/v1/guaki/prospects", SCOPE_GUAKI_READ),
+        ("GET", "/api/v1/guaki/funnel", SCOPE_GUAKI_READ),
+        ("POST", "/api/v1/guaki/prospects/{lead_id}/link", SCOPE_GUAKI_READ),
+        ("POST", "/api/v1/guaki/link/match", SCOPE_GUAKI_READ),
     }
 )
 
@@ -140,6 +153,7 @@ __all__ = [
     "PERMITTED_SCOPES",
     "SCOPE_CRM_READ",
     "SCOPE_DISPATCH_HERMES",
+    "SCOPE_GUAKI_READ",
     "SCOPE_HERMES_JOBS_READ",
     "SCOPE_JOBS_READ",
     "SCOPE_SCRAPE_RUN",
