@@ -55,8 +55,38 @@ async def list_companies(
     min_rating: float | None = Query(default=None, ge=0, le=5),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[CompanySummaryOut]:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+
+    # En serverless (Vercel) sin DB directa, usar PostgREST HTTP
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        filters = {}
+        if city:
+            filters["city"] = city
+        if category:
+            filters["category"] = category
+        if platform:
+            filters["platform"] = platform
+        if verified is not None:
+            filters["verified"] = str(verified).lower()
+
+        items = await pg_select(
+            "companies",
+            filters=filters if filters else None,
+            limit=size,
+        )
+        return Page.build(
+            [CompanySummaryOut.model_validate(c) for c in items],
+            len(items),
+            page,
+            size,
+        )
+
     repo = CompanyRepository(db)
     stmt = repo.build_list_query(
         q=q,
