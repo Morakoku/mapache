@@ -2,7 +2,7 @@
 
 Capa mínima que implementa REQUEST → AUTHENTICATION → ALLOW/DENY:
 
-- Extrae el header `Authorization: Bearer <client_id>.<timestamp>.<nonce>.<sign>`.
+- Extrae el header `Authorization: Bearer <clien...n>`.
 - Valida firma HMAC-SHA256 con `SERVICE_TOKEN_KEY`, ventana temporal (TTL) y
   nonce único (replay) vía `NonceStore` en memoria.
 - Si `settings.service_auth_enabled` está en False (default local) la capa queda
@@ -50,7 +50,9 @@ from app.core.security import NonceStore, ServiceTokenError, verify_service_toke
 # primeros pertenecen a terceros.
 _PUBLIC_PREFIXES = (
     "/health",
+    "/api/health",  # Vercel rewrite
     "/tracking",
+    "/api/tracking",  # Vercel rewrite
     "/docs",
     "/redoc",
     "/openapi.json",
@@ -58,7 +60,7 @@ _PUBLIC_PREFIXES = (
 
 # Únicos endpoints `/auth/*` públicos: los que ejecutan Google/Microsoft durante
 # el flujo OAuth. `accounts` y `disconnect` quedan fuera (protegidos).
-_OAUTH_PUBLIC_PATH_RE = re.compile(r"^/auth/[^/]+/(connect|callback)$")
+_OAUTH_PUBLIC_PATH_RE = re.compile(r"^/api/auth/[^/]+/(connect|callback)$|^/auth/[^/]+/(connect|callback)$")
 
 # Instancia única de nonces del proceso. Se comparte entre peticiones; se vacía
 # al reiniciar Mapache (ver NonceStore). No es thread-perfect ni persiste — se
