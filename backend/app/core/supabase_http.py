@@ -84,6 +84,16 @@ async def insert(
             data["id"] = str(uuid.uuid4())
         if "dedupe_key" not in data and table == "companies":
             data["dedupe_key"] = data.get("name", "").lower().strip()
+        # Campos NOT NULL de companies con defaults
+        if table == "companies":
+            if "owner_id" not in data:
+                data["owner_id"] = data["id"]  # owner_id = id del creador
+            from datetime import datetime, UTC
+            now = datetime.now(UTC).isoformat()
+            if "first_extracted_at" not in data:
+                data["first_extracted_at"] = now
+            if "last_extracted_at" not in data:
+                data["last_extracted_at"] = now
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:

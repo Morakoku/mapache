@@ -130,6 +130,9 @@ async def create_company(
     # En serverless (Vercel) sin DB directa, usar PostgREST HTTP
     if settings.use_postgrest or db is None:
         from app.core.supabase_http import insert as pg_insert
+        from app.core.logging import get_logger
+
+        logger = get_logger(__name__)
 
         data = {"name": payload.name.strip()}
         if payload.category:
@@ -147,7 +150,9 @@ async def create_company(
         if payload.website:
             data["website"] = payload.website
 
+        logger.info("create_company_postgrest", data=data)
         result = await pg_insert("companies", data)
+        logger.info("create_company_postgrest_result", result=result)
         if result:
             return CompanyDetailOut.model_validate(result[0])
         raise HTTPException(status_code=500, detail="No se pudo crear la empresa")
