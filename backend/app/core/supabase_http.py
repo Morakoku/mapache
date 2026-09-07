@@ -1,8 +1,7 @@
 """Cliente de base de datos vía Supabase PostgREST API.
 
-Usa el cliente oficial de Supabase (HTTP-based) en lugar de conexión
-directa a PostgreSQL. Funciona en Vercel serverless donde asyncpg
-no puede conectar (IPv4 vs IPv6, pooler limits).
+Usa httpx (ya en dependencias) para hacer llamadas HTTP directas a PostgREST.
+Funciona en Vercel serverless donde asyncpg no puede conectar.
 """
 
 from __future__ import annotations
@@ -14,34 +13,7 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-_client: Any = None  # Supabase client singleton
 
-
-def get_supabase() -> Any:
-    """Obtiene el cliente Supabase (singleton)."""
-    global _client
-    if _client is None:
-        try:
-            from supabase import create_client
-            settings = get_settings()
-            _client = create_client(
-                settings.supabase_url,
-                settings.supabase_service_role_key,
-            )
-            logger.info("supabase_client_created", url=settings.supabase_url)
-        except ImportError:
-            logger.error("supabase_package_not_installed")
-            raise
-    return _client
-
-
-def reset_supabase() -> None:
-    """Resetea el cliente (útil en tests)."""
-    global _client
-    _client = None
-
-
-# ------------------------------------------------------------------ CRUD helpers
 async def select(
     table: str,
     *,
@@ -52,17 +24,36 @@ async def select(
     count: bool = False,
 ) -> list[dict[str, Any]]:
     """SELECT vía PostgREST."""
-    client = get_supabase()
-    query = client.table(table).select(columns, count="exact" if count else None)
+    import httpx
+
+    settings = get_settings()
+    if not settings.supabase_url or not settings.supabase_service_role_key_value:
+        return []
+
+    url = settings.supabase_url.rstrip("/") + f"/rest/v1/{table}"
+    headers = {
+        "apikey": settings.supabase_service_role_key_value,
+        "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
+    }
+    params: dict[str, str] = {"select": columns}
     if filters:
         for key, value in filters.items():
-            query = query.eq(key, value)
+            params[key] = f"eq.{value}"
     if order:
-        query = query.order(order)
+        params["order"] = order
     if limit:
-        query = query.limit(limit)
-    result = query.execute()
-    return result.data
+        params["limit"] = str(limit)
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers, params=params)
+            if resp.status_code == 200:
+                return resp.json()
+            logger.warning("postgrest_select_failed", table=table, status=resp.status_code)
+            return []
+    except Exception as exc:
+        logger.error("postgrest_select_error", table=table, error=str(exc))
+        return []
 
 
 async def insert(
@@ -72,12 +63,32 @@ async def insert(
     upsert: bool = False,
 ) -> list[dict[str, Any]]:
     """INSERT vía PostgREST."""
-    client = get_supabase()
-    if upsert:
-        result = client.table(table).upsert(data).execute()
-    else:
-        result = client.table(table).insert(data).execute()
-    return result.data
+    import httpx
+
+    settings = get_settings()
+    if not settings.supabase_url or not settings.supabase_service_role_key_value:
+        return []
+
+    url = settings.supabase_url.rstrip("/") + f"/rest/v1/{table}"
+    headers = {
+        "apikey": settings.supabase_service_role_key_value,
+        "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if upsert:
+                headers["Prefer"] = "return=representation,resolution=merge-duplicates"
+            resp = await client.post(url, headers=headers, json=data)
+            if resp.status_code in (200, 201):
+                return resp.json()
+            logger.warning("postgrest_insert_failed", table=table, status=resp.status_code)
+            return []
+    except Exception as exc:
+        logger.error("postgrest_insert_error", table=table, error=str(exc))
+        return []
 
 
 async def update(
@@ -86,12 +97,33 @@ async def update(
     data: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """UPDATE vía PostgREST."""
-    client = get_supabase()
-    query = client.table(table).update(data)
+    import httpx
+
+    settings = get_settings()
+    if not settings.supabase_url or not settings.supabase_service_role_key_value:
+        return []
+
+    url = settings.supabase_url.rstrip("/") + f"/rest/v1/{table}"
+    headers = {
+        "apikey": settings.supabase_service_role_key_value,
+        "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+    params: dict[str, str] = {}
     for key, value in filters.items():
-        query = query.eq(key, value)
-    result = query.execute()
-    return result.data
+        params[key] = f"eq.{value}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.patch(url, headers=headers, json=data, params=params)
+            if resp.status_code == 200:
+                return resp.json()
+            logger.warning("postgrest_update_failed", table=table, status=resp.status_code)
+            return []
+    except Exception as exc:
+        logger.error("postgrest_update_error", table=table, error=str(exc))
+        return []
 
 
 async def delete(
@@ -99,28 +131,34 @@ async def delete(
     filters: dict[str, str],
 ) -> list[dict[str, Any]]:
     """DELETE vía PostgREST."""
-    client = get_supabase()
-    query = client.table(table).delete()
+    import httpx
+
+    settings = get_settings()
+    if not settings.supabase_url or not settings.supabase_service_role_key_value:
+        return []
+
+    url = settings.supabase_url.rstrip("/") + f"/rest/v1/{table}"
+    headers = {
+        "apikey": settings.supabase_service_role_key_value,
+        "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
+    }
+    params: dict[str, str] = {}
     for key, value in filters.items():
-        query = query.eq(key, value)
-    result = query.execute()
-    return result.data
+        params[key] = f"eq.{value}"
 
-
-async def rpc(function_name: str, params: dict[str, Any] | None = None) -> Any:
-    """Llamada a función RPC."""
-    client = get_supabase()
-    result = client.rpc(function_name, params or {}).execute()
-    return result.data
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.delete(url, headers=headers, params=params)
+            if resp.status_code == 200:
+                return resp.json()
+            logger.warning("postgrest_delete_failed", table=table, status=resp.status_code)
+            return []
+    except Exception as exc:
+        logger.error("postgrest_delete_error", table=table, error=str(exc))
+        return []
 
 
 async def health_check() -> bool:
     """Verifica que la conexión a Supabase funciona."""
-    try:
-        client = get_supabase()
-        # Intentar una query simple
-        result = client.table("alembic_version").select("version_num").limit(1).execute()
-        return True
-    except Exception as e:
-        logger.error("supabase_health_check_failed", error=str(e))
-        return False
+    result = await select("alembic_version", columns="version_num", limit=1)
+    return len(result) > 0
