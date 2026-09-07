@@ -116,7 +116,11 @@ _ENDPOINT_SCOPE_MAP = frozenset(
         ("POST", "/api/v1/guaki/link/match", SCOPE_GUAKI_READ),
         # Guaki companies read
         ("GET", "/api/v1/companies", SCOPE_GUAKI_READ),
+        ("GET", "/api/v1/companies/", SCOPE_GUAKI_READ),
         ("GET", "/api/v1/companies/{company_id}", SCOPE_GUAKI_READ),
+        # Guaki dispatch: crear empresas desde el frontend
+        ("POST", "/api/v1/companies", SCOPE_GUAKI_READ),
+        ("POST", "/api/v1/companies/", SCOPE_GUAKI_READ),
     }
 )
 
