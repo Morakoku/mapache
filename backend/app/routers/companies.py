@@ -6,7 +6,7 @@ import uuid
 from dataclasses import asdict
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.container import get_job_queue
@@ -120,9 +120,38 @@ async def company_facets(db: AsyncSession = Depends(get_db)) -> CompanyFacetsOut
 @router.post("", response_model=CompanyDetailOut, status_code=status.HTTP_201_CREATED)
 async def create_company(
     payload: CompanyManualIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> CompanyDetailOut:
     """Alta manual, para empresas que llegan fuera de una búsqueda."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+
+    # En serverless (Vercel) sin DB directa, usar PostgREST HTTP
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import insert as pg_insert
+
+        data = {"name": payload.name.strip()}
+        if payload.category:
+            data["category"] = payload.category
+        if payload.address:
+            data["address"] = payload.address
+        if payload.city:
+            data["city"] = payload.city
+        if payload.phone:
+            data["phone"] = payload.phone
+        if payload.whatsapp:
+            data["whatsapp"] = payload.whatsapp
+        if payload.email:
+            data["email"] = payload.email
+        if payload.website:
+            data["website"] = payload.website
+
+        result = await pg_insert("companies", data)
+        if result:
+            return CompanyDetailOut.model_validate(result[0])
+        raise HTTPException(status_code=500, detail="No se pudo crear la empresa")
+
     website = normalize_url(payload.website)
     phone = to_e164(payload.phone)
     whatsapp = to_e164(payload.whatsapp) or (
