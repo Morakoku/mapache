@@ -74,7 +74,7 @@ async def scrape_place(
         except Exception as exc:  # noqa: BLE001 - re-levantamos el último intento
             last_err = exc
             if attempt < 2:
-                await asyncio.sleep(2 ** attempt)  # backoff 1s -> 2s
+                await asyncio.sleep(2**attempt)  # backoff 1s -> 2s
     logger.warning("detail_page_retries_exhausted", url=url, error=str(last_err))
     return None
 

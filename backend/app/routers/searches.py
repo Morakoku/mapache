@@ -132,6 +132,3 @@ async def list_runs(
     service = SearchService(db)
     await service.get_or_404(search_id)
     return [SearchRunOut.model_validate(r) for r in await service.list_runs(search_id)]
-
-
-

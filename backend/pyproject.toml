@@ -36,6 +36,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.8",
     "mypy>=1.13",
+    "taskipy>=1.14.1",
 ]
 
 [build-system]
@@ -44,6 +45,15 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+# ---------------------------------------------------------------- scripts (taskipy)
+
+[tool.taskipy.tasks]
+test = "python -m pytest tests/ --tb=short"
+lint = "python -m ruff check ."
+typecheck = "python -m mypy app/"
+format = "python -m ruff format ."
+start = "python -m uvicorn app.main:app --reload"
 
 # ---------------------------------------------------------------- ruff
 

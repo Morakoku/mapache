@@ -154,9 +154,7 @@ class Company(OwnedModel):
     # para no volver a gastar cuota: cada consulta cuesta, y la información
     # pública de un negocio no cambia de un día para otro.
     web_findings: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
-    web_findings_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    web_findings_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     @property
     def is_verified(self) -> bool:

@@ -61,6 +61,7 @@ def _clinic_input(*, employee_range: str | None = "5-20") -> ScoreInput:
 
 # ---------------------------------------------------------------- segmento
 
+
 def test_segment_a_small_company() -> None:
     seg = segment_classify(_clinic_input(employee_range="5-20"))
     assert seg.segment == "SEGMENT_A"
@@ -102,6 +103,7 @@ def test_segment_not_only_by_employees() -> None:
 
 # ---------------------------------------------------------------- próxima acción
 
+
 def test_next_action_close_triggers_mri() -> None:
     data = _clinic_input()
     score = _score(data)
@@ -139,6 +141,7 @@ def test_next_action_unclassified_no_contact() -> None:
 
 # ---------------------------------------------------------------- mensaje
 
+
 def test_message_uses_only_observed_signal() -> None:
     data = _clinic_input()
     seg = segment_classify(data)
@@ -162,14 +165,19 @@ def test_message_segment_b() -> None:
 
 # ---------------------------------------------------------------- LIR + cadena completa
 
+
 def test_commercial_intelligence_full_record() -> None:
     data = _clinic_input()
     score = _score(data)
     bant = bant_score(data)
     seg = segment_classify(data)
     lir = commercial_intelligence(
-        data, score, bant, seg,
-        company_name="Clínica Estética San Pascual", city_label="Santiago",
+        data,
+        score,
+        bant,
+        seg,
+        company_name="Clínica Estética San Pascual",
+        city_label="Santiago",
     )
     assert lir["empresa"] == "Clínica Estética San Pascual"
     assert lir["segmento"] == seg.segment
@@ -200,8 +208,12 @@ def test_fase14_controlled_chain() -> None:
 
     # (5) LIR.
     lir = commercial_intelligence(
-        data, score, bant, seg,
-        company_name="Clínica Estética San Pascual", city_label="Santiago",
+        data,
+        score,
+        bant,
+        seg,
+        company_name="Clínica Estética San Pascual",
+        city_label="Santiago",
     )
 
     # (6) MENSAJE.
@@ -215,8 +227,11 @@ def test_fase14_controlled_chain() -> None:
 
     # La próxima acción es coherente con el score.
     assert lir["proxima_accion"] in {
-        "Contactar", "Preparar Business MRI", "Investigar contacto",
-        "Investigar señales", "No contactar",
+        "Contactar",
+        "Preparar Business MRI",
+        "Investigar contacto",
+        "Investigar señales",
+        "No contactar",
     }
 
 

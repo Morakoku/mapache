@@ -444,13 +444,9 @@ class CallService:
         contact = lead.contact
 
         if contact is not None and contact.do_not_contact:
-            brief.blocked_reason = (
-                "Este contacto está marcado como 'no contactar'. No le llames."
-            )
+            brief.blocked_reason = "Este contacto está marcado como 'no contactar'. No le llames."
         elif brief.last_call_outcome == CallOutcome.DO_NOT_CALL:
-            brief.blocked_reason = (
-                "En la última llamada pidió que no le volvieran a llamar."
-            )
+            brief.blocked_reason = "En la última llamada pidió que no le volvieran a llamar."
 
         if not brief.phone:
             brief.warnings.append(

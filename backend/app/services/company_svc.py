@@ -47,6 +47,7 @@ _QUALITY_FIELDS = (
     "opening_hours",
 )
 
+
 @dataclass(frozen=True, slots=True)
 class UpsertResult:
     company: Company

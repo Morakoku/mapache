@@ -145,8 +145,7 @@ DEFAULT_SCRIPTS: tuple[dict[str, Any], ...] = (
             "momento dímelo y colgamos. ¿Tienes treinta segundos?"
         ),
         "context": (
-            "Vi {{company_name}} en {{city}} y me llamó la atención "
-            "que {{signal_summary}}."
+            "Vi {{company_name}} en {{city}} y me llamó la atención que {{signal_summary}}."
         ),
         "questions": [
             "¿Hoy quién les ve ese tema?",
@@ -251,8 +250,7 @@ DEFAULT_SCRIPTS: tuple[dict[str, Any], ...] = (
             ),
             _objection(
                 "Tengo que consultarlo",
-                "Lógico. ¿Qué necesitarías tener en la mano para esa conversación? "
-                "Te lo preparo.",
+                "Lógico. ¿Qué necesitarías tener en la mano para esa conversación? Te lo preparo.",
             ),
         ],
     },
@@ -276,8 +274,7 @@ DEFAULT_SCRIPTS: tuple[dict[str, Any], ...] = (
         "objections": [
             _objection(
                 "Ahora no es el momento",
-                "Perfecto. ¿Te busco en dos o tres meses? Lo anoto y hasta entonces "
-                "no te molesto.",
+                "Perfecto. ¿Te busco en dos o tres meses? Lo anoto y hasta entonces no te molesto.",
             ),
             _objection(
                 "No lo vi",

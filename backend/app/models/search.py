@@ -88,9 +88,7 @@ class Search(OwnedModel):
     # Exigir que el resultado sea del tipo de negocio y la ciudad pedidos.
     # Activado por defecto: Google devuelve de todo alrededor del término, y
     # sin esto la base se llena de empresas que hay que descartar a mano.
-    strict_match: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true")
-    )
+    strict_match: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 
     auto_enrich: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     auto_score: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))

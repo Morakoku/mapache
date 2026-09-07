@@ -106,9 +106,7 @@ async def run_discovery(job_id: uuid.UUID, payload: dict[str, Any]) -> None:
                 else SerpProvider.GOOGLE_CSE
             ),
             serp_api_key=(
-                decrypt(settings_row.serp_api_key_enc)
-                if settings_row.serp_api_key_enc
-                else None
+                decrypt(settings_row.serp_api_key_enc) if settings_row.serp_api_key_enc else None
             ),
             serp_engine_id=settings_row.serp_engine_id,
         )

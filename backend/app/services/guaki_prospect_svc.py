@@ -80,12 +80,12 @@ class GuakiProspectService:
         detectadas = len(items)
         registrados = cnt(lambda x: x["registro_en_guaki"] is not None)
         pagos = cnt(
-            lambda x: x["registro_en_guaki"] is not None
-            and x["plan_actual"] not in (None, "GRATIS")
+            lambda x: (
+                x["registro_en_guaki"] is not None and x["plan_actual"] not in (None, "GRATIS")
+            )
         )
         gratuitos = cnt(
-            lambda x: x["registro_en_guaki"] is not None
-            and x["plan_actual"] in (None, "GRATIS")
+            lambda x: x["registro_en_guaki"] is not None and x["plan_actual"] in (None, "GRATIS")
         )
 
         return {
@@ -198,20 +198,14 @@ class GuakiProspectService:
             "ciudad": company.city,
             "web": company.website,
             "redes": social or None,
-            "email": (
-                (lead.contact.email if lead.contact else None) or company.email
-            ),
-            "telefono": (
-                (lead.contact.phone if lead.contact else None) or company.phone
-            ),
+            "email": ((lead.contact.email if lead.contact else None) or company.email),
+            "telefono": ((lead.contact.phone if lead.contact else None) or company.phone),
             "oportunidad": classification["opportunity"],
             "razones": classification["reasons"],
             "fecha_deteccion": (
                 company.first_extracted_at.isoformat() if company.first_extracted_at else None
             ),
-            "estado_comercial": (
-                lead.stage.stage_type if lead.stage else lead.status.value
-            ),
+            "estado_comercial": (lead.stage.stage_type if lead.stage else lead.status.value),
             "contacto_realizado": contacted,
             "respuesta": replied,
             # Lado Guaki: datos del vínculo Prospecto↔Negocio (LOOP-24).

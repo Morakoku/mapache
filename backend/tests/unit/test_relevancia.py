@@ -64,7 +64,7 @@ def test_una_de_las_categorias_secundarias_basta() -> None:
 
 
 def test_con_varias_palabras_basta_una() -> None:
-    """"restaurante italiano" acepta algo categorizado solo "Restaurante"."""
+    """ "restaurante italiano" acepta algo categorizado solo "Restaurante"."""
     query = _query(business_type="restaurante italiano")
     assert query.matches_filters(_place("Da Vinci", category="Restaurante"))
 
@@ -109,9 +109,7 @@ def test_la_misma_ciudad_pasa() -> None:
 
 def test_sin_ciudad_no_se_descarta() -> None:
     """Falta el dato, no lo contradice: descartar sería tirar un buen prospecto."""
-    assert _query().matches_filters(
-        _place("Pan Sin Dirección", category="Panadería", address=None)
-    )
+    assert _query().matches_filters(_place("Pan Sin Dirección", category="Panadería", address=None))
 
 
 def test_un_barrio_de_la_ciudad_pasa() -> None:

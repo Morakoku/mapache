@@ -179,9 +179,7 @@ class Settings(BaseSettings):
     @property
     def hermes_scope_set(self) -> frozenset[str]:
         """Scopes concedidos al cliente `hermes` (parsea `hermes_scopes`)."""
-        return frozenset(
-            p.strip() for p in self.hermes_scopes.split(",") if p.strip()
-        )
+        return frozenset(p.strip() for p in self.hermes_scopes.split(",") if p.strip())
 
     def service_scopes_for(self, client_id: str) -> frozenset[str]:
         """Scopes concedidos a una identidad de servicio.
@@ -203,11 +201,7 @@ class Settings(BaseSettings):
         servicio mientras la lista no cambie (rotación futura: añadir el nuevo
         id, desplegar, y después retirar el viejo).
         """
-        return frozenset(
-            p.strip()
-            for p in self.service_trusted_client_ids.split(",")
-            if p.strip()
-        )
+        return frozenset(p.strip() for p in self.service_trusted_client_ids.split(",") if p.strip())
 
     @property
     def is_production(self) -> bool:

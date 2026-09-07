@@ -35,8 +35,10 @@ def action_for(method: str, path: str) -> str:
     if path.startswith("/api/v1/emails") or path.startswith("/api/v1/conversations"):
         return "email"
     if (
-        "/searches/" in path and path.endswith("/run")
-    ) or "/prospect-plan/run" in path or "/enrich" in path:
+        ("/searches/" in path and path.endswith("/run"))
+        or "/prospect-plan/run" in path
+        or "/enrich" in path
+    ):
         return "scraping"
     if path.startswith("/api/v1/jobs"):
         return "jobs"

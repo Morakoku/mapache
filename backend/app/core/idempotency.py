@@ -41,9 +41,7 @@ class IdempotencyService:
                 code="IDEMPOTENCY_CONFLICT",
                 details={"job_id": str(existing.job_id) if existing.job_id else None},
             )
-        self.session.add(
-            IdempotencyEvent(idempotency_key=key, method=method, path=path)
-        )
+        self.session.add(IdempotencyEvent(idempotency_key=key, method=method, path=path))
         try:
             await self.session.flush()
         except IntegrityError as exc:

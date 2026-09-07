@@ -37,9 +37,7 @@ def upgrade() -> None:
         sa.Column("intent_confidence", sa.Numeric(precision=3, scale=2), nullable=True),
     )
     op.add_column("conversations", sa.Column("intent_summary", sa.Text(), nullable=True))
-    op.add_column(
-        "conversations", sa.Column("intent_suggested_stage", stage_type, nullable=True)
-    )
+    op.add_column("conversations", sa.Column("intent_suggested_stage", stage_type, nullable=True))
     op.add_column(
         "conversations",
         sa.Column("intent_reply_points", postgresql.ARRAY(sa.Text()), nullable=True),
@@ -47,9 +45,7 @@ def upgrade() -> None:
     op.add_column("conversations", sa.Column("intent_source", sa.String(length=10), nullable=True))
     op.add_column(
         "conversations",
-        sa.Column(
-            "intent_reviewed", sa.Boolean(), server_default=sa.text("false"), nullable=False
-        ),
+        sa.Column("intent_reviewed", sa.Boolean(), server_default=sa.text("false"), nullable=False),
     )
     # Bandeja: "respuestas con intención sin revisar" es la consulta del día.
     op.create_index(

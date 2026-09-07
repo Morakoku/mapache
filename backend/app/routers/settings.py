@@ -185,9 +185,7 @@ async def set_serp_key(payload: SerpKeyIn, db: AsyncSession = Depends(get_db)) -
         api_key = decrypt(settings.serp_api_key_enc)
     engine_id = (payload.engine_id or "").strip() or None
 
-    buscador = build_web_search(
-        provider=payload.provider, api_key=api_key, engine_id=engine_id
-    )
+    buscador = build_web_search(provider=payload.provider, api_key=api_key, engine_id=engine_id)
     await verify_credentials(buscador)
 
     if api_key:

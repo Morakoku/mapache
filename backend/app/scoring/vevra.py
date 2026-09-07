@@ -111,9 +111,7 @@ def _budget(data: ScoreInput) -> tuple[int, list[str]]:
         reasons.append("Tamaño desconocido")
 
     categories = {_norm(c) for c in (data.company_category, *data.company_categories) if c}
-    matched = any(
-        any(hv in cat or cat in hv for hv in HIGH_VALUE_SECTORS) for cat in categories
-    )
+    matched = any(any(hv in cat or cat in hv for hv in HIGH_VALUE_SECTORS) for cat in categories)
     if matched:
         score += 40
         reasons.append("Sector de alto valor (sprint $2,850)")
@@ -362,9 +360,8 @@ def recommended_message(
     """
     name = company_name or "tu empresa"
     city = city_label or data.company_city or ""
-    sector = (
-        data.company_category
-        or (data.company_categories[0] if data.company_categories else "")
+    sector = data.company_category or (
+        data.company_categories[0] if data.company_categories else ""
     )
 
     observed = sorted(data.signals & _FRICTION_SIGNALS)
@@ -382,7 +379,7 @@ def recommended_message(
         mensaje = (
             f"Hola,\n\n{name} ya opera con varios canales y procesos. En VEYRA analizamos "
             f"procesos, datos y canales para encontrar dónde se pierden oportunidades y qué "
-            f"automatizar. La señal \"{obs}\" es un punto que solemos revisar.\n\n"
+            f'automatizar. La señal "{obs}" es un punto que solemos revisar.\n\n'
             f"¿Te gustaría un diagnóstico para {name} en {city}?"
         )
     elif segment.is_a:
@@ -460,9 +457,7 @@ def commercial_intelligence(
     """
     dims = score.breakdown.get("dimensions", {})
     priority = (
-        "ALTA"
-        if (bant.is_sql or bant.is_close)
-        else ("MEDIA" if score.total >= 50 else "BAJA")
+        "ALTA" if (bant.is_sql or bant.is_close) else ("MEDIA" if score.total >= 50 else "BAJA")
     )
     action, action_reason = next_action(score, bant, segment)
 

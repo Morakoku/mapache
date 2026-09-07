@@ -45,7 +45,10 @@ async def _socials(hrefs: list[str], texto: str = "") -> dict[str, str]:
             "https://tiktok.com/@lafinca",
         ),
         # Navegación interna de Google: no es un enlace saliente.
-        ("https://www.google.com/url?q=/maps/place/x", "https://www.google.com/url?q=/maps/place/x"),
+        (
+            "https://www.google.com/url?q=/maps/place/x",
+            "https://www.google.com/url?q=/maps/place/x",
+        ),
         ("https://instagram.com/directo", "https://instagram.com/directo"),
     ],
 )

@@ -103,9 +103,7 @@ class TestRateLimitMiddleware:
         assert third.json()["error"]["code"] == "RATE_LIMITED"
 
     async def test_disabled_bypasses(self) -> None:
-        app = _app(
-            (RateLimitMiddleware, {"enabled": False, "limits": {"default": 0}})
-        )
+        app = _app((RateLimitMiddleware, {"enabled": False, "limits": {"default": 0}}))
         async with _client(app) as ac:
             r = await ac.post("/api/v1/jobs/1/cancel?confirm=true")
         assert r.status_code == 200

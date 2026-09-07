@@ -60,9 +60,7 @@ async def test_google_normaliza_el_resultado(monkeypatch: pytest.MonkeyPatch) ->
     )
 
     async with httpx.AsyncClient() as client:
-        resultados = await GoogleCseClient(api_key="k", engine_id="m").search(
-            client, "pan", page=0
-        )
+        resultados = await GoogleCseClient(api_key="k", engine_id="m").search(client, "pan", page=0)
 
     assert resultados[0].title == "Panadería Ana"
     assert resultados[0].snippet == "Masa madre desde 1998"

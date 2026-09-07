@@ -90,9 +90,7 @@ def guaki_opportunity(data: ScoreInput) -> GuakiOpportunity:
         reasons.append("presencia en redes no verificada")
 
     # --- datos de contacto
-    has_contact = bool(
-        data.company_phone or data.company_email or data.contact_email
-    )
+    has_contact = bool(data.company_phone or data.company_email or data.contact_email)
     if has_contact:
         reasons.append("datos de contacto disponibles")
     else:

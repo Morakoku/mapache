@@ -155,9 +155,7 @@ async def run_prospect_plan(
             "search_id": str(search.id),
             "provider": "google_maps_scraper",
         }
-        job = await jobs.create(
-            JobType.DISCOVERY, job_payload, progress_total=search.target_count
-        )
+        job = await jobs.create(JobType.DISCOVERY, job_payload, progress_total=search.target_count)
         encolar.append((job.id, job_payload))
 
     await db.commit()

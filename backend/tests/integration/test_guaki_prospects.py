@@ -143,9 +143,7 @@ async def test_guaki_prospects_devuelve_prospecto_clasificado(
     assert prospect["estado_comercial"]
 
 
-async def test_guaki_summary_cuenta_oportunidades(
-    db: AsyncSession, client: AsyncClient
-) -> None:
+async def test_guaki_summary_cuenta_oportunidades(db: AsyncSession, client: AsyncClient) -> None:
     await _seed(db)
     await db.commit()
 

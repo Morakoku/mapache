@@ -282,9 +282,7 @@ async def _complete_openai_compatible(
             if exc.response.status_code in (401, 403)
             else "El proveedor de IA devolvió un error. Se usará el camino sin IA."
         )
-        raise AIUnavailableError(
-            mensaje, details={"status": exc.response.status_code}
-        ) from exc
+        raise AIUnavailableError(mensaje, details={"status": exc.response.status_code}) from exc
     except httpx.HTTPError as exc:
         logger.warning("ai_connection_error", provider=credentials.provider.value, error=str(exc))
         raise AIUnavailableError("No se pudo contactar con el proveedor de IA.") from exc
@@ -349,7 +347,7 @@ async def verify_credentials(credentials: AICredentials) -> None:
     después, en el primer correo que salió sin personalizar.
     """
     await complete_json(
-        system="Responde únicamente {\"ok\": true}.",
+        system='Responde únicamente {"ok": true}.',
         user="ping",
         schema=_PING_SCHEMA,
         credentials=credentials,

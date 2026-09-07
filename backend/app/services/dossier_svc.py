@@ -126,9 +126,7 @@ class DossierService:
             return company.web_findings is None
         return datetime.now(UTC) - company.web_findings_at > _FRESH_FOR
 
-    async def _search_web(
-        self, company: Company, buscador: WebSearchClient
-    ) -> list[WebFinding]:
+    async def _search_web(self, company: Company, buscador: WebSearchClient) -> list[WebFinding]:
         """Busca la empresa en el índice del buscador.
 
         La consulta lleva nombre y ciudad entre comillas: sin ellas, "Panadería
@@ -200,10 +198,7 @@ class DossierService:
     async def _lead_of(self, company_id: uuid.UUID) -> Lead | None:
         """El prospecto de esta empresa, si ya se creó."""
         result = await self.session.execute(
-            select(Lead)
-            .where(Lead.company_id == company_id)
-            .order_by(Lead.score.desc())
-            .limit(1)
+            select(Lead).where(Lead.company_id == company_id).order_by(Lead.score.desc()).limit(1)
         )
         return result.scalars().first()
 

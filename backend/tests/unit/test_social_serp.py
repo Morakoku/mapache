@@ -40,9 +40,7 @@ def _mock(monkeypatch: pytest.MonkeyPatch, paginas: list[list[dict[str, Any]]]) 
     async def fake_get(self: httpx.AsyncClient, url: str, **kw: Any) -> httpx.Response:
         consultas.append(kw["params"]["q"])
         items = restantes.pop(0) if restantes else []
-        return httpx.Response(
-            200, json={"items": items}, request=httpx.Request("GET", url)
-        )
+        return httpx.Response(200, json={"items": items}, request=httpx.Request("GET", url))
 
     monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
     return consultas
@@ -181,12 +179,7 @@ async def test_el_filtro_de_relevancia_tambien_aplica(monkeypatch: pytest.Monkey
 async def test_se_para_al_llegar_al_limite(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock(
         monkeypatch,
-        [
-            [
-                _item(f"Panadería {i}", f"https://www.instagram.com/pan{i}/")
-                for i in range(10)
-            ]
-        ],
+        [[_item(f"Panadería {i}", f"https://www.instagram.com/pan{i}/") for i in range(10)]],
     )
     query = SearchQuery(business_type="panadería", city="Medellín", limit=3)
 
@@ -200,7 +193,7 @@ async def test_se_para_al_llegar_al_limite(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.asyncio
 async def test_la_cuota_agotada_se_dice_con_claridad(monkeypatch: pytest.MonkeyPatch) -> None:
-    """"0 resultados" haría pensar que no hay negocios; es que se acabó la cuota."""
+    """ "0 resultados" haría pensar que no hay negocios; es que se acabó la cuota."""
 
     async def fake_get(self: httpx.AsyncClient, url: str, **kw: Any) -> httpx.Response:
         return httpx.Response(429, json={}, request=httpx.Request("GET", url))
@@ -225,9 +218,7 @@ def test_sin_credenciales_el_mensaje_es_accionable() -> None:
 
 def test_una_red_desconocida_se_rechaza() -> None:
     with pytest.raises(ConfigurationError):
-        build_serp_provider(
-            "tiktok", provider=SerpProvider.GOOGLE_CSE, api_key="k", engine_id="m"
-        )
+        build_serp_provider("tiktok", provider=SerpProvider.GOOGLE_CSE, api_key="k", engine_id="m")
 
 
 # ------------------------------------------------------------------ registro
@@ -276,6 +267,7 @@ async def test_healthcheck_no_lanza_si_la_clave_esta_mal(
 @pytest.mark.asyncio
 async def test_el_mismo_proveedor_funciona_con_brave(monkeypatch: pytest.MonkeyPatch) -> None:
     """Cambiar de buscador no cambia lo que sale: sigue siendo una empresa."""
+
     async def fake_get(self: httpx.AsyncClient, url: str, **kw: Any) -> httpx.Response:
         cuerpo = {
             "web": {

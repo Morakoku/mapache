@@ -16,9 +16,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 
 def is_destructive(method: str, path: str) -> bool:
-    return (
-        (method == "DELETE" and path.startswith("/api/v1"))
-        or (method == "POST" and path.startswith("/api/v1/jobs/") and path.endswith("/cancel"))
+    return (method == "DELETE" and path.startswith("/api/v1")) or (
+        method == "POST" and path.startswith("/api/v1/jobs/") and path.endswith("/cancel")
     )
 
 
@@ -28,8 +27,10 @@ class DestructiveGuardMiddleware(BaseHTTPMiddleware):
         self._enabled = enabled
 
     async def dispatch(self, request: Request, call_next: Any) -> Any:
-        if self._enabled and is_destructive(request.method, request.url.path) and (
-            request.query_params.get("confirm") != "true"
+        if (
+            self._enabled
+            and is_destructive(request.method, request.url.path)
+            and (request.query_params.get("confirm") != "true")
         ):
             return JSONResponse(
                 status_code=409,

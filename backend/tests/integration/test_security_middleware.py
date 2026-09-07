@@ -1,4 +1,4 @@
-﻿"""Tests de integraciÃ³n de la capa de seguridad (LOOP-13).
+"""Tests de integraciÃ³n de la capa de seguridad (LOOP-13).
 
 Verifican el comportamiento real de la app: confirmaciÃ³n destructiva,
 escritura de auditorÃ­a e idempotencia por Idempotency-Key.
@@ -118,9 +118,7 @@ class TestIdempotencyHttp:
         app.dependency_overrides[get_db] = _override_get_db
         headers = {"Idempotency-Key": "clave-http-123456"}
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             first = await ac.post("/api/v1/test/job", headers=headers)
             second = await ac.post("/api/v1/test/job", headers=headers)
 
@@ -147,9 +145,7 @@ class TestIdempotencyHttp:
 
         app.dependency_overrides[get_db] = _override_get_db
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r1 = await ac.post("/api/v1/test/job")
             r2 = await ac.post("/api/v1/test/job")
 

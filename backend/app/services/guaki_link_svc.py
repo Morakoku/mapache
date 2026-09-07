@@ -25,6 +25,7 @@ from app.schemas.guaki import GuakiLinkIn
 
 # ------------------------------------------------------------ normalización
 
+
 def norm_domain(value: str | None) -> str | None:
     """Dominio comparable: sin esquema, www, ruta ni parámetros."""
     if not value:
@@ -60,6 +61,7 @@ def norm_name(value: str | None) -> str | None:
 
 
 # ------------------------------------------------------------ matching puro
+
 
 @dataclass(frozen=True, slots=True)
 class GuakiMatch:
@@ -128,23 +130,22 @@ def match_business(prospect: dict[str, object], business: dict[str, object]) -> 
 
 # ------------------------------------------------------------ servicio
 
+
 class GuakiLinkService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
     async def by_lead(self, lead_id: uuid.UUID) -> GuakiLink | None:
-        return await self.session.scalar(
-            select(GuakiLink).where(GuakiLink.lead_id == lead_id)
-        )
+        return await self.session.scalar(select(GuakiLink).where(GuakiLink.lead_id == lead_id))
 
     async def links_by_leads(self, lead_ids: list[uuid.UUID]) -> dict[uuid.UUID, GuakiLink]:
         if not lead_ids:
             return {}
         rows = (
-            await self.session.execute(
-                select(GuakiLink).where(GuakiLink.lead_id.in_(lead_ids))
-            )
-        ).scalars().all()
+            (await self.session.execute(select(GuakiLink).where(GuakiLink.lead_id.in_(lead_ids))))
+            .scalars()
+            .all()
+        )
         return {row.lead_id: row for row in rows}
 
     async def upsert(self, lead_id: uuid.UUID, payload: GuakiLinkIn) -> GuakiLink:
@@ -186,14 +187,10 @@ class GuakiLinkService:
     async def find_candidates(self, business: dict[str, object]) -> list[dict[str, object]]:
         """Busca, entre los prospectos existentes, los que podrían ser este negocio."""
         stmt = (
-            select(Lead)
-            .options(selectinload(Lead.company), selectinload(Lead.contact))
-            .limit(500)
+            select(Lead).options(selectinload(Lead.company), selectinload(Lead.contact)).limit(500)
         )
         leads = list((await self.session.execute(stmt)).scalars().all())
-        signals_map = await self._signals_by_company(
-            [lead.company_id for lead in leads]
-        )
+        signals_map = await self._signals_by_company([lead.company_id for lead in leads])
         candidates: list[dict[str, object]] = []
         for lead in leads:
             company = lead.company

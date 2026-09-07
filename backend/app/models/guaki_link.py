@@ -38,17 +38,13 @@ class GuakiLink(BaseModel):
         unique=True,
     )
     guaki_business_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    match_state: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default=UNMATCHED
-    )
+    match_state: Mapped[str] = mapped_column(String(20), nullable=False, server_default=UNMATCHED)
     confidence: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     # Señales usadas para el match: dominio, email, telefono, identificador_externo,
     # nombre+ubicacion, ...
     signals: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    registered_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    registered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     plan: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str | None] = mapped_column(String(32), nullable=True)
 

@@ -1,4 +1,4 @@
-﻿"""LOOP-16 — Primera integración real Hermes → Mapache (en TEST).
+"""LOOP-16 — Primera integración real Hermes → Mapache (en TEST).
 
 Demuestra la cadena completa: Hermes → autenticación → autorización → contrato
 → Mapache → worker → job → resultado → Hermes, sin efectos comerciales.
@@ -164,8 +164,10 @@ class TestDispatch:
         assert r.status_code == 403
         assert r.json()["error"]["code"] == "JOB_TYPE_BLOCKED"
         jobs = (
-            await db.execute(select(Job).where(Job.job_type == JobType.SEND_BATCH))
-        ).scalars().all()
+            (await db.execute(select(Job).where(Job.job_type == JobType.SEND_BATCH)))
+            .scalars()
+            .all()
+        )
         assert jobs == [], "SEND_BATCH no debe crear ningún job"
 
     async def test_otros_job_types_bloqueados(self, hermes_client: AsyncClient) -> None:
@@ -240,9 +242,7 @@ class TestOwnership:
                 await s.commit()
 
     async def test_get_job_sin_token_401(self, hermes_client: AsyncClient) -> None:
-        r = await hermes_client.get(
-            f"{API}/hermes/jobs/00000000-0000-0000-0000-000000000000"
-        )
+        r = await hermes_client.get(f"{API}/hermes/jobs/00000000-0000-0000-0000-000000000000")
         assert r.status_code == 401
 
 
@@ -266,23 +266,27 @@ class TestAudit:
         job_id = uuid.UUID(r.json()["job_id"])
 
         audit = (
-            await db.execute(
-                select(AuditLog).where(
-                    AuditLog.action == "hermes.dispatch",
-                    AuditLog.client_id == "hermes",
+            (
+                await db.execute(
+                    select(AuditLog).where(
+                        AuditLog.action == "hermes.dispatch",
+                        AuditLog.client_id == "hermes",
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         assert audit is not None
         assert audit.status == 202
         assert audit.idempotency_key is not None
 
         # El vínculo key → job queda en idempotency_events (resultado en jobs).
         idem = (
-            await db.execute(
-                select(IdempotencyEvent).where(IdempotencyEvent.job_id == job_id)
-            )
-        ).scalars().first()
+            (await db.execute(select(IdempotencyEvent).where(IdempotencyEvent.job_id == job_id)))
+            .scalars()
+            .first()
+        )
         assert idem is not None
 
     async def test_no_secrets_en_logs(self, hermes_client: AsyncClient, caplog) -> None:

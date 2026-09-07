@@ -74,9 +74,7 @@ class ScoringService:
             result = compute_score(data, weights, now)
             bant = bant_score(data)
             segment = segment_classify(data)
-            result.breakdown["vevra"] = self._vevra_block(
-                lead, data, result, bant, segment
-            )
+            result.breakdown["vevra"] = self._vevra_block(lead, data, result, bant, segment)
             result.breakdown["guaki"] = self._guaki_block(data)
             await self._apply(lead, result)
             scored += 1

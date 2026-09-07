@@ -1,0 +1,31 @@
+Metadata-Version: 2.4
+Name: crm-backend
+Version: 0.1.0
+Summary: CRM de prospección, outbound sales y conversión de clientes
+Requires-Python: >=3.12
+Requires-Dist: fastapi>=0.115
+Requires-Dist: uvicorn[standard]>=0.32
+Requires-Dist: pydantic>=2.9
+Requires-Dist: pydantic-settings>=2.6
+Requires-Dist: tzdata>=2024.1
+Requires-Dist: sqlalchemy[asyncio]>=2.0.36
+Requires-Dist: asyncpg>=0.30
+Requires-Dist: alembic>=1.14
+Requires-Dist: structlog>=24.4
+Requires-Dist: cryptography>=43.0
+Requires-Dist: python-multipart>=0.0.12
+Requires-Dist: httpx>=0.27
+Requires-Dist: playwright>=1.49
+Requires-Dist: selectolax>=0.3.21
+Requires-Dist: phonenumbers>=8.13
+Requires-Dist: tldextract>=5.1
+Requires-Dist: dnspython>=2.7
+Requires-Dist: aiosmtplib>=3.0
+Requires-Dist: aioimaplib>=1.1
+Requires-Dist: anthropic>=0.69
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.24; extra == "dev"
+Requires-Dist: ruff>=0.8; extra == "dev"
+Requires-Dist: mypy>=1.13; extra == "dev"
+Requires-Dist: taskipy>=1.14.1; extra == "dev"

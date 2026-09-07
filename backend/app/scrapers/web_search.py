@@ -55,8 +55,9 @@ class WebSearchClient(Protocol):
     max_pages: int
     pause_between_pages: float
 
-    async def search(self, client: httpx.AsyncClient, terms: str, *, page: int) -> list[WebResult]:
-        ...
+    async def search(
+        self, client: httpx.AsyncClient, terms: str, *, page: int
+    ) -> list[WebResult]: ...
 
 
 # Lo que dice Brave cuando la clave está mal. Llega como 422, que a secas se
@@ -227,8 +228,7 @@ def build_web_search(
     """Cliente del buscador configurado, o un error que dice qué falta."""
     if not api_key:
         raise ConfigurationError(
-            "Buscar en la web necesita la clave de un buscador. Se configura en "
-            "Configuración.",
+            "Buscar en la web necesita la clave de un buscador. Se configura en Configuración.",
             code="MISSING_SERP_CREDENTIALS",
         )
 

@@ -252,9 +252,9 @@ class CompanyRepository(BaseRepository[Company]):
                             Company.google_place_id.is_not(None),
                         )
                     ).label("verified"),
-                    contar(
-                        Company.google_ftid.is_(None) & Company.google_place_id.is_(None)
-                    ).label("unverified"),
+                    contar(Company.google_ftid.is_(None) & Company.google_place_id.is_(None)).label(
+                        "unverified"
+                    ),
                     contar(Company.is_permanently_closed.is_(True)).label("closed"),
                 ).select_from(Company)
             )
@@ -269,14 +269,18 @@ class CompanyRepository(BaseRepository[Company]):
         ).all()
 
         cities = (
-            await self.session.execute(
-                select(Company.city)
-                .where(Company.city.is_not(None))
-                .group_by(Company.city)
-                .order_by(func.count().desc())
-                .limit(40)
+            (
+                await self.session.execute(
+                    select(Company.city)
+                    .where(Company.city.is_not(None))
+                    .group_by(Company.city)
+                    .order_by(func.count().desc())
+                    .limit(40)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         return CompanyFacetsOut(
             total=row.total,

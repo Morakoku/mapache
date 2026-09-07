@@ -56,9 +56,7 @@ def test_all_api_v1_operations_declare_bearer() -> None:
     schema = _schema()
     operations = _operations(schema)
     api_ops = {
-        name: op
-        for name, op in operations.items()
-        if name.split(" ", 1)[1].startswith("/api/v1")
+        name: op for name, op in operations.items() if name.split(" ", 1)[1].startswith("/api/v1")
     }
     assert api_ops, "Debe haber operaciones /api/v1"
     for name, op in api_ops.items():
@@ -97,9 +95,23 @@ def test_no_sensitive_endpoint_is_public() -> None:
     schema = _schema()
     operations = _operations(schema)
     sensitive = (
-        "/emails/", "/conversations/", "/suppression/", "/searches/", "/services/",
-        "/companies/", "/contacts/", "/leads/", "/pipeline/", "/calls/", "/follow-ups/",
-        "/sequences/", "/templates/", "/settings/", "/jobs/", "/tasks/", "/activities/",
+        "/emails/",
+        "/conversations/",
+        "/suppression/",
+        "/searches/",
+        "/services/",
+        "/companies/",
+        "/contacts/",
+        "/leads/",
+        "/pipeline/",
+        "/calls/",
+        "/follow-ups/",
+        "/sequences/",
+        "/templates/",
+        "/settings/",
+        "/jobs/",
+        "/tasks/",
+        "/activities/",
         "/call-scripts/",
     )
     for name, op in operations.items():
@@ -123,9 +135,9 @@ def test_runtime_auth_still_disabled() -> None:
     # esperado al terminar este loop.
     assert settings.service_auth_enabled is False
     assert settings.service_token_key is not None
-    assert (
-        settings.service_token_key.get_secret_value() != "<placeholder>"
-    ), "el placeholder no es una credencial real"
+    assert settings.service_token_key.get_secret_value() != "<placeholder>", (
+        "el placeholder no es una credencial real"
+    )
 
 
 def test_openapi_does_not_expose_secrets() -> None:

@@ -160,9 +160,7 @@ class TestAuthorizationL2:
         assert r.status_code not in (401, 403)
 
     async def test_jobs_hermes_sin_token_401(self, auth_client: AsyncClient) -> None:
-        r = await auth_client.get(
-            "/api/v1/hermes/jobs/00000000-0000-0000-0000-000000000000"
-        )
+        r = await auth_client.get("/api/v1/hermes/jobs/00000000-0000-0000-0000-000000000000")
         assert r.status_code == 401
 
 
@@ -178,9 +176,7 @@ class TestNoSecrets:
         text = str(create_app(settings=auth_app).openapi())
         assert TEST_KEY not in text
 
-    async def test_respuestas_de_error_no_expone_la_clave(
-        self, auth_client: AsyncClient
-    ) -> None:
+    async def test_respuestas_de_error_no_expone_la_clave(self, auth_client: AsyncClient) -> None:
         responses = [
             await auth_client.get("/api/v1/leads"),  # 401
             await auth_client.get("/api/v1/leads", headers={"Authorization": "Bearer x"}),
@@ -189,9 +185,7 @@ class TestNoSecrets:
         for r in responses:
             assert TEST_KEY not in r.text
 
-    async def test_logs_no_expone_la_clave(
-        self, auth_client: AsyncClient, caplog
-    ) -> None:
+    async def test_logs_no_expone_la_clave(self, auth_client: AsyncClient, caplog) -> None:
         with caplog.at_level(logging.DEBUG):
             await auth_client.get("/api/v1/leads")  # 401
             await auth_client.get(

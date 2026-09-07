@@ -81,8 +81,10 @@ async def test_instagram_como_sitio_web_se_guarda_como_red(db: AsyncSession) -> 
 
     assert outcome.socials_found == 1
     redes = (
-        await db.execute(select(CompanySocial).where(CompanySocial.company_id == company.id))
-    ).scalars().all()
+        (await db.execute(select(CompanySocial).where(CompanySocial.company_id == company.id)))
+        .scalars()
+        .all()
+    )
     assert len(redes) == 1
     assert redes[0].platform == "instagram"
     assert redes[0].handle == "donaana"
@@ -109,8 +111,10 @@ async def test_las_cuatro_redes_que_importan(
     await EnrichmentService(db).enrich(company)
 
     red = (
-        await db.execute(select(CompanySocial).where(CompanySocial.company_id == company.id))
-    ).scalars().one()
+        (await db.execute(select(CompanySocial).where(CompanySocial.company_id == company.id)))
+        .scalars()
+        .one()
+    )
     assert red.platform == plataforma
     assert red.handle == handle
 
@@ -166,10 +170,14 @@ async def test_las_redes_de_la_ficha_se_guardan_al_descubrir(db: AsyncSession) -
     await db.flush()
 
     redes = (
-        await db.execute(
-            select(CompanySocial).where(CompanySocial.company_id == result.company.id)
+        (
+            await db.execute(
+                select(CompanySocial).where(CompanySocial.company_id == result.company.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     # Las tres de la ficha más la del campo "sitio web".
     assert {r.platform for r in redes} == {"tiktok", "linkedin", "x", "instagram"}

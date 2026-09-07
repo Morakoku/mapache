@@ -253,17 +253,13 @@ class TestL2Middleware:
         # Token válido con los scopes del contrato, pero la operación (CRM)
         # no está declarada → DENY.
         async with _client(_settings()) as ac:
-            r = await ac.get(
-                "/api/v1/leads", headers={"Authorization": f"Bearer {make_token()}"}
-            )
+            r = await ac.get("/api/v1/leads", headers={"Authorization": f"Bearer {make_token()}"})
         assert r.status_code == 403
         assert r.json()["error"]["code"] == "SCOPE_NOT_ASSIGNED"
 
     async def test_ping_no_declarado_returns_403(self) -> None:
         async with _client(_settings()) as ac:
-            r = await ac.get(
-                "/api/v1/ping", headers={"Authorization": f"Bearer {make_token()}"}
-            )
+            r = await ac.get("/api/v1/ping", headers={"Authorization": f"Bearer {make_token()}"})
         assert r.status_code == 403
         assert r.json()["error"]["code"] == "SCOPE_NOT_ASSIGNED"
 

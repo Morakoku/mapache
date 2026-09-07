@@ -34,6 +34,7 @@ logger = get_logger(__name__)
 def _primera_mayuscula(texto: str) -> str:
     return texto[:1].upper() + texto[1:] if texto else texto
 
+
 # Señales que dicen algo sobre la presencia digital del negocio. Si el servicio
 # apunta a alguna de ellas, la búsqueda no debe exigir sitio web propio: el
 # prospecto ideal es justamente el que no lo tiene.
@@ -226,9 +227,7 @@ class ProspectPlanService:
             ],
         )
 
-    async def _ask_ai(
-        self, service: Service, credentials: client.AICredentials
-    ) -> list[str]:
+    async def _ask_ai(self, service: Service, credentials: client.AICredentials) -> list[str]:
         try:
             result = await client.complete_json(
                 system=prompts.PLANNER_SYSTEM,
@@ -275,9 +274,7 @@ class ProspectPlanService:
         )
         return [ciudad for ciudad, _ in filas if ciudad]
 
-    async def create_searches(
-        self, service: Service, plan: ProspectPlan
-    ) -> list[Search]:
+    async def create_searches(self, service: Service, plan: ProspectPlan) -> list[Search]:
         """Crea las búsquedas del plan que aún no existían."""
         creadas: list[Search] = []
         for propuesta in plan.searches:

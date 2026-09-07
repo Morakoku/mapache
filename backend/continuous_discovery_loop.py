@@ -16,17 +16,24 @@ import urllib.error
 
 API = os.getenv("MAPACHE_DISCOVERY_API", "http://127.0.0.1:8000/api/v1").rstrip("/")
 SEARCH_NAMES = [
-    "Odonto-CO-Medellin", "Odonto-VE-Caracas",
-    "Salud-Clinicas-CO-Bogota", "Salud-Clinicas-VE-Caracas",
-    "Inmobiliaria-CO-Medellin", "Inmobiliaria-VE-Valencia",
-    "Logistica-CO-Barranquilla", "Logistica-VE-Maracaibo",
-    "Retail-CO-Cali", "Finanzas-CO-Bogota",
-    "Barberia-CO-Medellin", "Barberia-VE-Caracas",
-    "Autos-CO-Bogota", "Gastronomia-CO-Cali",
+    "Odonto-CO-Medellin",
+    "Odonto-VE-Caracas",
+    "Salud-Clinicas-CO-Bogota",
+    "Salud-Clinicas-VE-Caracas",
+    "Inmobiliaria-CO-Medellin",
+    "Inmobiliaria-VE-Valencia",
+    "Logistica-CO-Barranquilla",
+    "Logistica-VE-Maracaibo",
+    "Retail-CO-Cali",
+    "Finanzas-CO-Bogota",
+    "Barberia-CO-Medellin",
+    "Barberia-VE-Caracas",
+    "Autos-CO-Bogota",
+    "Gastronomia-CO-Cali",
 ]
-CYCLE_INTERVAL_S = 90       # espera entre una búsqueda terminada y la siguiente
-JOB_POLL_S = 12            # cadencia de sondeo del estado del job en cola
-REPORT_EVERY_TICKS = 4     # imprime un snapshot global cada N polls estando en carrera
+CYCLE_INTERVAL_S = 90  # espera entre una búsqueda terminada y la siguiente
+JOB_POLL_S = 12  # cadencia de sondeo del estado del job en cola
+REPORT_EVERY_TICKS = 4  # imprime un snapshot global cada N polls estando en carrera
 STOP_FILE = os.getenv(
     "DISCOVERY_STOP_FILE",
     r"C:\Users\ADMINI~1\AppData\Local\Temp\opencode\guaki_stop.flag",
@@ -57,8 +64,10 @@ def _http(method: str, path: str) -> dict | None:
 
 def _post(path: str) -> dict | None:
     req = urllib.request.Request(
-        f"{API}/{path.lstrip('/')}", method="POST",
-        headers={"Content-Type": "application/json"}, data=b"{}",
+        f"{API}/{path.lstrip('/')}",
+        method="POST",
+        headers={"Content-Type": "application/json"},
+        data=b"{}",
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
@@ -104,7 +113,9 @@ def _overview() -> dict:
 def main() -> None:
     _log(f"GUAKI/AI-STUDIO DISCOVERY LOOP arrancado — stop cuando exista: {STOP_FILE}")
     snap = _overview()
-    _log(f"base -> companies={snap.get('companies_found')} email={snap.get('companies_with_email')} leads={snap.get('leads')}")
+    _log(
+        f"base -> companies={snap.get('companies_found')} email={snap.get('companies_with_email')} leads={snap.get('leads')}"
+    )
 
     total_new = 0
     tick = 0
@@ -142,18 +153,24 @@ def main() -> None:
                     break
                 if ticks_in % REPORT_EVERY_TICKS == 0:
                     snap = _overview()
-                    _log(f"[en curso {name}] {st} | tot={snap.get('companies_found')} email={snap.get('companies_with_email')} leads={snap.get('leads')}")
+                    _log(
+                        f"[en curso {name}] {st} | tot={snap.get('companies_found')} email={snap.get('companies_with_email')} leads={snap.get('leads')}"
+                    )
 
             if res and st == "COMPLETED":
                 total_new += int(res.get("new") or 0)
             snap = _overview()
-            _log(f"[FIN {name}] {st} found={res.get('found')} new={res.get('new')} dup={res.get('duplicate')} | acum_new={total_new} | tot={snap.get('companies_found')} email={snap.get('companies_with_email')} leads={snap.get('leads')}")
+            _log(
+                f"[FIN {name}] {st} found={res.get('found')} new={res.get('new')} dup={res.get('duplicate')} | acum_new={total_new} | tot={snap.get('companies_found')} email={snap.get('companies_with_email')} leads={snap.get('leads')}"
+            )
 
             time.sleep(CYCLE_INTERVAL_S)
 
         # Una vuelta completa de las 14 buscadas; se re-emite el resumen y gira.
         snap = _overview()
-        _log(f"Ronda completada. Acumulado nuevas={total_new} | tot={snap.get('companies_found')} email={snap.get('companies_with_email')} leads={snap.get('leads')}")
+        _log(
+            f"Ronda completada. Acumulado nuevas={total_new} | tot={snap.get('companies_found')} email={snap.get('companies_with_email')} leads={snap.get('leads')}"
+        )
         time.sleep(CYCLE_INTERVAL_S)
 
 

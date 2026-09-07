@@ -42,9 +42,7 @@ def test_local_allows_service_auth_disabled() -> None:
         ),
     ],
 )
-def test_production_rejects_incomplete_security(
-    overrides: dict[str, object], message: str
-) -> None:
+def test_production_rejects_incomplete_security(overrides: dict[str, object], message: str) -> None:
     with pytest.raises(ValidationError, match=message):
         Settings(**_base_settings(environment="production", **overrides))
 

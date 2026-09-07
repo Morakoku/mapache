@@ -15,8 +15,10 @@ from app.routers import (
     auth,
     calls,
     companies,
+    contact_queue,
     contacts,
     conversations,
+    csv_import,
     emails,
     followups,
     guaki,
@@ -56,6 +58,8 @@ public_router.include_router(health.router)
 api_router.include_router(services.router, prefix="/services", tags=["servicios"])
 api_router.include_router(searches.router, prefix="/searches", tags=["búsquedas"])
 api_router.include_router(companies.router, prefix="/companies", tags=["empresas"])
+api_router.include_router(csv_import.router)
+api_router.include_router(contact_queue.router)
 api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 
 # Contrato Hermes (LOOP-16): dispatch + estado de jobs. Nada más.

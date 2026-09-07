@@ -312,7 +312,7 @@ async def test_api_brief_y_registro(client: AsyncClient, db: AsyncSession) -> No
 async def test_el_recordatorio_de_llamar_cae_en_horario(
     client: AsyncClient, db: AsyncSession
 ) -> None:
-    """"Recuérdame en dos días" no puede quedar a las tres de la mañana."""
+    """ "Recuérdame en dos días" no puede quedar a las tres de la mañana."""
     settings = await _seed_settings(db)
     await _scripts(db)
     lead = await _seed(db)
@@ -328,8 +328,8 @@ async def test_el_recordatorio_de_llamar_cae_en_horario(
     assert response.json()["follow_up_created"] is True
 
     pendiente = (
-        await db.execute(select(FollowUp).where(FollowUp.lead_id == lead.id))
-    ).scalars().one()
+        (await db.execute(select(FollowUp).where(FollowUp.lead_id == lead.id))).scalars().one()
+    )
 
     local = local_now(settings, pendiente.scheduled_at)
     assert settings.send_window_start <= local.time() <= settings.send_window_end
@@ -647,9 +647,7 @@ async def test_lead_sin_ciudad_avisa_del_hueco(db: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_actualizar_guion_valida_las_variables(
-    client: AsyncClient, db: AsyncSession
-) -> None:
+async def test_actualizar_guion_valida_las_variables(client: AsyncClient, db: AsyncSession) -> None:
     await _seed_settings(db)
     await _scripts(db)
     await db.commit()
