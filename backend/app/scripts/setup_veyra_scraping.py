@@ -12,16 +12,13 @@ Sin API key: muestra las ciudades configuradas (solo lectura).
 from __future__ import annotations
 
 # ---------------------------------------------------------------- ciudades
-# Ciudades principales de Colombia y Venezuela para prospección
 
 CIUDADES_COLOMBIA = [
-    # Principales
     {"nombre": "Bogotá", "lat": 4.7110, "lng": -74.0721},
     {"nombre": "Medellín", "lat": 6.2442, "lng": -75.5812},
     {"nombre": "Cali", "lat": 3.4516, "lng": -76.5320},
     {"nombre": "Barranquilla", "lat": 10.9685, "lng": -74.7813},
     {"nombre": "Cartagena", "lat": 10.3910, "lng": -75.4794},
-    # Secundarias
     {"nombre": "Bucaramanga", "lat": 7.1254, "lng": -73.1198},
     {"nombre": "Pereira", "lat": 4.8133, "lng": -75.6961},
     {"nombre": "Santa Marta", "lat": 11.2408, "lng": -74.1990},
@@ -40,13 +37,11 @@ CIUDADES_COLOMBIA = [
 ]
 
 CIUDADES_VENEZUELA = [
-    # Principales
     {"nombre": "Caracas", "lat": 10.4806, "lng": -66.9036},
     {"nombre": "Maracaibo", "lat": 10.6666, "lng": -71.6124},
     {"nombre": "Valencia", "lat": 10.1579, "lng": -67.9972},
     {"nombre": "Barquisimeto", "lat": 10.0647, "lng": -69.3570},
     {"nombre": "Maracay", "lat": 10.2469, "lng": -67.5958},
-    # Secundarias
     {"nombre": "Ciudad Guayana", "lat": 8.3514, "lng": -62.6436},
     {"nombre": "Barcelona", "lat": 10.1167, "lng": -64.7000},
     {"nombre": "Maturín", "lat": 9.7457, "lng": -63.1830},
@@ -62,43 +57,64 @@ CIUDADES_VENEZUELA = [
     {"nombre": "Guanare", "lat": 9.0417, "lng": -69.7500},
 ]
 
+# ---------------------------------------------------------------- negocios
 
-def generar_consultas(busquedas_por_ciudad: list[dict[str, str]] | None = None) -> list[dict]:
-    """Genera las consultas de busqueda para cada ciudad.
-    
-    Args:
-        busquedas_por_ciudad: Lista de diccionarios con 'business_type' para cada ciudad.
-        Si es None, usa las busquedas por defecto de Veyra.
-    """
-    if busquedas_por_ciudad is None:
-        # Tipos de negocio que segun el "Business MRI" tienen friccion operativa
-        busquedas_por_ciudad = [
-            {"business_type": "odontología"},
-            {"business_type": "clínica"},
-            {"business_type": "laboratorio"},
-            {"business_type": "farmacia"},
-            {"business_type": "consultorio"},
-            {"business_type": "bufete de abogados"},
-            {"business_type": "agencia inmobiliaria"},
-            {"business_type": "concesionario"},
-            {"business_type": "constructora"},
-            {"business_type": "academia"},
-            {"business_type": "restaurante"},
-            {"business_type": "hotel"},
-        ]
-    
+TIPOS_NEGOCIO = [
+    # Salud
+    "odontología", "clínica", "laboratorio", "farmacia", "consultorio",
+    "veterinaria", "óptica", "fisioterapia",
+    # Legal / Financiero
+    "bufete de abogados", "notaría", "contaduría", "auditoría",
+    # Inmobiliario / Construcción
+    "agencia inmobiliaria", "constructora", "arquitectura", "diseño de interiores",
+    # Automotriz
+    "concesionario", "taller mecánico", "autolavado", "repuestos",
+    # Educación
+    "academia", "universidad", "jardín infantil", "capacitación corporativa",
+    # Hospitalidad
+    "restaurante", "hotel", "bar", "cafetería", "catering", "food truck",
+    # Retail / Comercio
+    "tienda retail", "supermercado", "boutique", "ferretería", "papelería", "floristería",
+    # Servicios profesionales
+    "agencia de marketing", "consultora", "asesoría financiera", "corredora de seguros",
+    # Logística
+    "transporte", "mensajería", "almacenamiento", "importación", "exportación",
+    # Manufactura
+    "fábrica", "producción", "empaque", "textil", "calzado", "muebles",
+    # Tecnología
+    "desarrollo de software", "soporte TI", "ciberseguridad", "hosting",
+    # Belleza / Estética
+    "peluquería", "barbería", "spa", "uñas", "cosmética",
+    # Fitness
+    "gimnasio", "crossfit", "yoga", "entrenador personal",
+    # Agroindustria
+    "finca", "agropecuaria", "procesadora de alimentos", "vivero",
+    # Entretenimiento
+    "eventos", "discoteca", "cine", "teatro", "parque recreativo",
+    # Servicios del hogar
+    "limpieza", "mantenimiento", "plomería", "electricidad", "jardinería",
+    # Finanzas
+    "banco", "cooperativa", "fintech", "casa de cambio",
+    # Medios
+    "periódico", "radio", "televisión", "podcast", "productora",
+]
+
+
+def generar_consultas() -> list[dict]:
+    """Genera todas las consultas de busqueda."""
     consultas = []
     ciudades = CIUDADES_COLOMBIA + CIUDADES_VENEZUELA
     
     for ciudad in ciudades:
-        for busqueda in busquedas_por_ciudad:
+        for tipo in TIPOS_NEGOCIO:
             consulta = {
-                "text_query": f"{busqueda['business_type']} in {ciudad['nombre']}",
+                "text_query": f"{tipo} in {ciudad['nombre']}",
                 "latitude": ciudad["lat"],
                 "longitude": ciudad["lng"],
                 "radius_km": 25,
                 "limit": 20,
                 "country": "Colombia" if ciudad in CIUDADES_COLOMBIA else "Venezuela",
+                "business_type": tipo,
             }
             consultas.append(consulta)
     
@@ -106,53 +122,62 @@ def generar_consultas(busquedas_por_ciudad: list[dict[str, str]] | None = None) 
 
 
 def mostrar_resumen() -> None:
-    """Muestra el resumen de ciudades configuradas."""
+    """Muestra el resumen de configuracion."""
     print("=" * 60)
     print("CONFIGURACIÓN SCRAPING - VEYRA SOLUCIONES")
     print("=" * 60)
     print()
-    print("🇨🇴 COLOMBIA ({} ciudades):".format(len(CIUDADES_COLOMBIA)))
-    for c in CIUDADES_COLOMBIA:
-        print(f"  - {c['nombre']}")
+    print(f"🇨🇴 COLOMBIA: {len(CIUDADES_COLOMBIA)} ciudades")
+    print(f"🇻🇪 VENEZUELA: {len(CIUDADES_VENEZUELA)} ciudades")
+    print(f"📊 TOTAL CIUDADES: {len(CIUDADES_COLOMBIA + CIUDADES_VENEZUELA)}")
     print()
-    print("🇻🇪 VENEZUELA ({} ciudades):".format(len(CIUDADES_VENEZUELA)))
-    for c in CIUDADES_VENEZUELA:
-        print(f"  - {c['nombre']}")
+    print(f"💼 TIPOS DE NEGOCIO: {len(TIPOS_NEGOCIO)}")
     print()
-    total_consultas = len(CIUDADES_COLOMBIA + CIUDADES_VENEZUELA) * 12
-    print(f"Total: {len(CIUDADES_COLOMBIA + CIUDADES_VENEZUELA)} ciudades × 12 busquedas = {total_consultas} consultas")
+    
+    sectores = {
+        "Salud": ["odontología", "clínica", "laboratorio", "farmacia", "consultorio", "veterinaria", "óptica", "fisioterapia"],
+        "Legal/Financiero": ["bufete de abogados", "notaría", "contaduría", "auditoría"],
+        "Inmobiliario/Construcción": ["agencia inmobiliaria", "constructora", "arquitectura", "diseño de interiores"],
+        "Automotriz": ["concesionario", "taller mecánico", "autolavado", "repuestos"],
+        "Educación": ["academia", "universidad", "jardín infantil", "capacitación corporativa"],
+        "Hospitalidad": ["restaurante", "hotel", "bar", "cafetería", "catering", "food truck"],
+        "Retail/Comercio": ["tienda retail", "supermercado", "boutique", "ferretería", "papelería", "floristería"],
+        "Servicios profesionales": ["agencia de marketing", "consultora", "asesoría financiera", "corredora de seguros"],
+        "Logística": ["transporte", "mensajería", "almacenamiento", "importación", "exportación"],
+        "Manufactura": ["fábrica", "producción", "empaque", "textil", "calzado", "muebles"],
+        "Tecnología": ["desarrollo de software", "soporte TI", "ciberseguridad", "hosting"],
+        "Belleza/Estética": ["peluquería", "barbería", "spa", "uñas", "cosmética"],
+        "Fitness": ["gimnasio", "crossfit", "yoga", "entrenador personal"],
+        "Agroindustria": ["finca", "agropecuaria", "procesadora de alimentos", "vivero"],
+        "Entretenimiento": ["eventos", "discoteca", "cine", "teatro", "parque recreativo"],
+        "Servicios del hogar": ["limpieza", "mantenimiento", "plomería", "electricidad", "jardinería"],
+        "Finanzas": ["banco", "cooperativa", "fintech", "casa de cambio"],
+        "Medios": ["periódico", "radio", "televisión", "podcast", "productora"],
+    }
+    
+    for sector, tipos in sectores.items():
+        print(f"  {sector}: {len(tipos)} tipos")
+    
+    print()
+    total = len(CIUDADES_COLOMBIA + CIUDADES_VENEZUELA) * len(TIPOS_NEGOCIO)
+    print(f"📈 TOTAL CONSULTAS: {len(CIUDADES_COLOMBIA + CIUDADES_VENEZUELA)} × {len(TIPOS_NEGOCIO)} = {total}")
     print()
     print("=" * 60)
-    print("TIPOS DE NEGOCIO POR DEFECTO:")
-    print("=" * 60)
-    tipos = [
-        "odontología", "clínica", "laboratorio", "farmacia",
-        "consultorio", "bufete de abogados", "agencia inmobiliaria",
-        "concesionario", "constructora", "academia", "restaurante", "hotel"
-    ]
-    for i, tipo in enumerate(tipos, 1):
-        print(f"  {i:2d}. {tipo}")
-    print()
-    print("Para ejecutar el scraping:")
-    print("  python -m app.scripts.setup_veyra_scraping --google-plaves-key <tu-api-key>")
 
 
 if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Configuracion scraping Veyra")
-    parser.add_argument("--google-places-key", help="API key de Google Places (opcional)")
+    parser.add_argument("--google-places-key", help="API key de Google Places")
     args = parser.parse_args()
     
     mostrar_resumen()
     
     if args.google_places_key:
-        print("\n✅ API key proporcionada. Configurando busquedas...")
-        # Aqui iria la logica de insertar en la base de datos
-        # Por ahora solo mostramos el resumen
+        print("\n✅ API key proporcionada. Generando consultas...")
         consultas = generar_consultas()
         print(f"Se generaron {len(consultas)} consultas de busqueda.")
-        print("Ejecutar desde el worker de discovery para iniciar el scraping.")
     else:
-        print("\n⚠️ Sin API key. Muestra de configuracion.")
-        print("Para scraping real, necesitas una Google Places API key.")
+        print("\n⚠️ Sin API key. Mostrando configuracion.")
+        print("Para scraping real: --google-places-key <tu-api-key>")
