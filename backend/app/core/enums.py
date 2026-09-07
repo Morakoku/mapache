@@ -117,6 +117,7 @@ class MailProviderType(StrEnum):
     MICROSOFT = "MICROSOFT"
     SMTP = "SMTP"
     MAILGUN = "MAILGUN"
+    RESEND = "RESEND"
 
 
 class AccountStatus(StrEnum):
