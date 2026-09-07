@@ -6,6 +6,7 @@ Funciona en Vercel serverless donde asyncpg no puede conectar.
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from app.core.config import get_settings
@@ -77,6 +78,13 @@ async def insert(
         "Prefer": "return=representation",
     }
 
+    # Si data no tiene id o dedupe_key, generarlos
+    if isinstance(data, dict):
+        if "id" not in data:
+            data["id"] = str(uuid.uuid4())
+        if "dedupe_key" not in data and table == "companies":
+            data["dedupe_key"] = data.get("name", "").lower().strip()
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             if upsert:
@@ -84,7 +92,7 @@ async def insert(
             resp = await client.post(url, headers=headers, json=data)
             if resp.status_code in (200, 201):
                 return resp.json()
-            logger.warning("postgrest_insert_failed", table=table, status=resp.status_code)
+            logger.warning("postgrest_insert_failed", table=table, status=resp.status_code, detail=resp.text)
             return []
     except Exception as exc:
         logger.error("postgrest_insert_error", table=table, error=str(exc))
