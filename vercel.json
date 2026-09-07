@@ -6,8 +6,7 @@
   "framework": "fastapi",
   "functions": {
     "api/index.py": {
-      "runtime": "python3.12",
-      "maxDuration": 30
+      "runtime": "python@3.12"
     }
   },
   "rewrites": [
