@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------ servicio-a-servicio (L1)
     # Autenticación mínima para clientes de servicio (Hermes → Mapache) mediante
     # token de portador con firma HMAC-SHA256:
-    #   Authorization: Bearer <client_id>.<timestamp>.<nonce>.<signature>
+    #   Authorization: Bearer <clien...ure>
     # `service_auth_enabled=True` exige token válido en toda la API /api/v1/*
     # (/health, /tracking y /auth quedan públicos; los consumen terceros y el
     # orquestador). Con `False` (default local) la capa pasa transparente.
@@ -209,9 +209,18 @@ class Settings(BaseSettings):
 
     @property
     def sqlalchemy_url(self) -> str:
-        """DSN con el driver async explícito."""
+        """DSN con el driver async explícito, compatible con asyncpg."""
         url = str(self.database_url)
         if url.startswith("postgresql://"):
+            # asyncpg no acepta sslmode en el DSN; usar ssl=true o quitarlo
+            # Vercel + Supabase pooler: quitar sslmode, asyncpg usa SSL por defecto
+            if "sslmode=" in url:
+                # Remove sslmode parameter
+                import re
+                url = re.sub(r"[?&]sslmode=[^&]+", "", url)
+                # Fix potential double ? or trailing &
+                url = re.sub(r"\?&", "?", url)
+                url = url.rstrip("&?")
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
         return url
 
