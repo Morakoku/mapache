@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import ssl
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmaker
+from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
