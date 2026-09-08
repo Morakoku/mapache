@@ -242,7 +242,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     _register_exception_handlers(app)
 
     # Dashboard de torre de control - ANTES del middleware de auth
-    @app.get("/torre-control/", include_in_schema=False)
+    @app.get("/dashboard/", include_in_schema=False)
     async def serve_dashboard():
         from fastapi.responses import HTMLResponse
         return HTMLResponse(content=DASHBOARD_HTML)
