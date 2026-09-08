@@ -24,10 +24,15 @@ app/core/headers.py
 app/core/idempotency.py
 app/core/jobs.py
 app/core/logging.py
+app/core/postgrest_client.py
+app/core/postgrest_fallback.py
 app/core/rate_limit.py
 app/core/scheduler.py
 app/core/scopes.py
 app/core/security.py
+app/core/supabase_client.py
+app/core/supabase_http.py
+app/core/supabase_rest.py
 app/core/tenant.py
 app/enrichment/__init__.py
 app/enrichment/email_verifier.py
@@ -41,8 +46,10 @@ app/mail/factory.py
 app/mail/gmail.py
 app/mail/graph.py
 app/mail/guardrails.py
+app/mail/mailgun.py
 app/mail/oauth.py
 app/mail/renderer.py
+app/mail/resend.py
 app/mail/smtp.py
 app/models/__init__.py
 app/models/activity.py
@@ -69,8 +76,11 @@ app/routers/__init__.py
 app/routers/auth.py
 app/routers/calls.py
 app/routers/companies.py
+app/routers/contact_queue.py
 app/routers/contacts.py
 app/routers/conversations.py
+app/routers/csv_import.py
+app/routers/email_simple.py
 app/routers/emails.py
 app/routers/followups.py
 app/routers/guaki.py
@@ -80,6 +90,9 @@ app/routers/jobs.py
 app/routers/leads.py
 app/routers/metrics.py
 app/routers/pipeline.py
+app/routers/public_dashboard.py
+app/routers/scheduler.py
+app/routers/scraping.py
 app/routers/searches.py
 app/routers/security_schemes.py
 app/routers/sequences.py
@@ -87,6 +100,7 @@ app/routers/services.py
 app/routers/settings.py
 app/routers/suppression.py
 app/routers/templates.py
+app/routers/torre_control.py
 app/routers/tracking.py
 app/schemas/__init__.py
 app/schemas/call.py
@@ -117,6 +131,9 @@ app/scrapers/google_maps/parsers.py
 app/scrapers/google_maps/provider.py
 app/scrapers/google_maps/search_page.py
 app/scrapers/google_maps/selectors.py
+app/scripts/send_mailgun_test.py
+app/scripts/send_test_email.py
+app/scripts/setup_veyra_scraping.py
 app/services/__init__.py
 app/services/activity_svc.py
 app/services/call_svc.py
@@ -138,6 +155,7 @@ app/services/pipeline_svc.py
 app/services/prospect_plan_svc.py
 app/services/scoring_svc.py
 app/services/sequence_svc.py
+app/templates/emails/render.py
 app/utils/__init__.py
 app/utils/dedupe.py
 app/utils/phone.py

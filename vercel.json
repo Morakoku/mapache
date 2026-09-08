@@ -3,11 +3,5 @@
   "outputDirectory": "backend",
   "devCommand": "cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000",
   "installCommand": "pip install -r backend/requirements.vercel.txt",
-  "framework": "fastapi",
-  "rewrites": [
-    { "source": "/torre-control/", "destination": "/torre-control.html" },
-    { "source": "/tc-api/(.*)", "destination": "/api/v1/tc/$1" },
-    { "source": "/dashboard", "destination": "/dashboard" },
-    { "source": "/dashboard/(.*)", "destination": "/dashboard/$1" }
-  ]
+  "framework": "fastapi"
 }

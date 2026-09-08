@@ -47,11 +47,39 @@ class EmailRepository(BaseRepository[EmailMessage]):
 
 @router.post("/preview", response_model=list[DraftOut])
 async def preview(payload: PreviewIn, db: AsyncSession | None = Depends(get_db)) -> list[DraftOut]:
-    """Borradores renderizados, sin enviar nada (Módulo 9).
+    from app.core.config import get_settings
 
-    Cada borrador trae sus avisos y, si algún guardrail lo bloquearía, el
-    motivo. El usuario ve el problema antes de pulsar enviar, no después.
-    """
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        leads_data = []
+        for lead_id in payload.lead_ids:
+            items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+            if items:
+                leads_data.append(items[0])
+
+        drafts = []
+        for lead in leads_data:
+            body_text = payload.body_text or ""
+            if payload.template_id:
+                template_items = await pg_select("email_templates", filters={"id": str(payload.template_id)}, limit=1)
+                if template_items:
+                    tpl = template_items[0]
+                    body_text = tpl.get("subject", "") + "\n\n" + tpl.get("body_text", "")
+            drafts.append(
+                DraftOut(
+                    lead_id=lead["id"],
+                    subject=payload.subject or "",
+                    body_text=body_text,
+                    body_html=None,
+                    template_id=payload.template_id,
+                    was_edited=False,
+                    warnings=[],
+                )
+            )
+        return drafts
+
     emails = EmailService(db)
     leads = LeadService(db)
 
