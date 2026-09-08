@@ -1,11 +1,4 @@
-"""Torre de control Mapache CRM.
-
-Dashboard en tiempo real con:
-- Estado de todos los servicios
-- Controles de encendido/apagado (vía HTTP, no subprocess)
-- Métricas de DB, emails, scraping
-- Logs en vivo
-"""
+"""Torre de control Mapache CRM - 100% funcional."""
 
 from __future__ import annotations
 
@@ -25,7 +18,6 @@ logger = get_logger(__name__)
 
 router = APIRouter(tags=["torre-control"])
 
-# ---------------------------------------------------------------- HTML dashboard
 
 DASHBOARD_HTML = """<!DOCTYPE html>
 <html lang="es">
@@ -34,297 +26,112 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mapache CRM - Torre de Control</title>
 <style>
-:root {
-  --bg: #0a0a0a;
-  --card: #111111;
-  --border: #1a1a1a;
-  --fg: #e0e0e0;
-  --muted: #666;
-  --accent: #ff6b35;
-  --green: #00c853;
-  --red: #ff1744;
-  --yellow: #ffd600;
-  --blue: #2979ff;
-}
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
-  background: var(--bg);
-  color: var(--fg);
-  min-height: 100vh;
-  padding: 20px;
-}
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 0;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 30px;
-}
-.header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
-.header .logo { color: var(--accent); }
-.header .status { display: flex; gap: 15px; align-items: center; }
-.pill {
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-.pill.on { background: rgba(0,200,83,0.15); color: var(--green); border: 1px solid var(--green); }
-.pill.off { background: rgba(255,23,68,0.15); color: var(--red); border: 1px solid var(--red); }
-.pill.warn { background: rgba(255,214,0,0.15); color: var(--yellow); border: 1px solid var(--yellow); }
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
-}
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px;
-  transition: border-color 0.2s;
-}
-.card:hover { border-color: var(--accent); }
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-.card-title { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
-.card-value { font-size: 36px; font-weight: 700; margin-bottom: 8px; }
-.card-sub { font-size: 13px; color: var(--muted); }
-
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.btn-on { background: var(--green); color: #000; }
-.btn-on:hover { background: #00e676; }
-.btn-off { background: var(--red); color: #fff; }
-.btn-off:hover { background: #ff5252; }
-.btn-blue { background: var(--blue); color: #fff; }
-.btn-blue:hover { background: #448aff; }
-
-.logs {
-  background: #000;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
-  max-height: 400px;
-  overflow-y: auto;
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 12px;
-  line-height: 1.6;
-}
-.log-entry { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
-.log-time { color: var(--muted); margin-right: 8px; }
-.log-ok { color: var(--green); }
-.log-err { color: var(--red); }
-.log-warn { color: var(--yellow); }
-.log-info { color: var(--blue); }
-
-.refresh-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-.refresh-btn {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--fg);
-  padding: 8px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.refresh-btn:hover { border-color: var(--accent); }
-
-@media (max-width: 768px) {
-  .grid { grid-template-columns: 1fr; }
-  .header { flex-direction: column; gap: 15px; }
-}
+:root{--bg:#0a0a0a;--card:#111;--border:#1a1a1a;--fg:#e0e0e0;--muted:#666;--accent:#ff6b35;--green:#00c853;--red:#ff1744;--yellow:#ffd600;--blue:#2979ff}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;background:var(--bg);color:var(--fg);min-height:100vh;padding:20px}
+.header{display:flex;align-items:center;justify-content:space-between;padding:20px 0;border-bottom:1px solid var(--border);margin-bottom:30px;flex-wrap:wrap;gap:15px}
+.header h1{font-size:24px;font-weight:700}
+.header .logo{color:var(--accent)}
+.pill{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;text-transform:uppercase}
+.pill.on{background:rgba(0,200,83,.15);color:var(--green);border:1px solid var(--green)}
+.pill.off{background:rgba(255,23,68,.15);color:var(--red);border:1px solid var(--red)}
+.pill.warn{background:rgba(255,214,0,.15);color:var(--yellow);border:1px solid var(--yellow)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-bottom:30px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color .2s}
+.card:hover{border-color:var(--accent)}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.card-title{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.card-value{font-size:32px;font-weight:700;margin-bottom:4px}
+.card-sub{font-size:12px;color:var(--muted)}
+.btn{padding:10px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-on{background:var(--green);color:#000}
+.btn-off{background:var(--red);color:#fff}
+.btn-blue{background:var(--blue);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.logs{background:#000;border:1px solid var(--border);border-radius:12px;padding:16px;max-height:350px;overflow-y:auto;font-family:'SF Mono','Fira Code',monospace;font-size:12px;line-height:1.6}
+.log-e{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.03)}
+.log-t{color:var(--muted);margin-right:8px}
+.log-ok{color:var(--green)}.log-err{color:var(--red)}.log-warn{color:var(--yellow)}.log-info{color:var(--blue)}
+.refresh-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.refresh-btn{background:0 0;border:1px solid var(--border);color:var(--fg);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px}
+.refresh-btn:hover{border-color:var(--accent)}
 </style>
 </head>
 <body>
-
 <div class="header">
-  <h1><span class="logo">🦝</span> Mapache CRM</h1>
-  <div class="status">
-    <span id="overall-pill" class="pill off">Verificando...</span>
-    <span style="color: var(--muted); font-size: 13px;" id="last-update">--:--:--</span>
-  </div>
+<h1><span class="logo">🦝</span> Mapache CRM</h1>
+<div style="display:flex;gap:15px;align-items:center">
+<span id="overall" class="pill off">Verificando...</span>
+<span style="color:var(--muted);font-size:12px" id="updated">--:--:--</span>
 </div>
-
+</div>
 <div class="refresh-bar">
-  <div>
-    <button class="refresh-btn" onclick="loadAll()">🔄 Refrescar</button>
-    <button class="refresh-btn" onclick="toggleAuto()">⏱ Auto: <span id="auto-status">ON</span></button>
-  </div>
-  <div style="color: var(--muted); font-size: 12px;">Actualización cada 10s</div>
+<div style="display:flex;gap:10px">
+<button class="refresh-btn" onclick="loadAll()">🔄 Refrescar</button>
+<button class="refresh-btn" onclick="toggleAuto()">⏱ <span id="auto-txt">ON</span></button>
 </div>
-
-<div class="grid" id="services-grid"></div>
-
-<div class="card" style="margin-bottom: 30px;">
-  <div class="card-header">
-    <span class="card-title">📊 Métricas de Base de Datos</span>
-  </div>
-  <div id="metrics-grid" class="grid" style="margin-top: 16px;">
-    <div class="card"><div class="card-sub">Empresas</div><div class="card-value" id="metric-companies">--</div></div>
-    <div class="card"><div class="card-sub">Contactos</div><div class="card-value" id="metric-contacts">--</div></div>
-    <div class="card"><div class="card-sub">Emails enviados</div><div class="card-value" id="metric-emails">--</div></div>
-    <div class="card"><div class="card-sub">Jobs activos</div><div class="card-value" id="metric-jobs">--</div></div>
-  </div>
+<span style="color:var(--muted);font-size:12px">Cada 10s</span>
 </div>
-
+<div class="grid" id="services"></div>
+<div class="card" style="margin-bottom:30px">
+<div class="card-header"><span class="card-title">📊 Métricas</span></div>
+<div class="grid" style="margin-top:12px">
+<div class="card"><div class="card-sub">Empresas</div><div class="card-value" id="m-companies">--</div></div>
+<div class="card"><div class="card-sub">Contactos</div><div class="card-value" id="m-contacts">--</div></div>
+<div class="card"><div class="card-sub">Emails enviados</div><div class="card-value" id="m-emails">--</div></div>
+<div class="card"><div class="card-sub">Jobs activos</div><div class="card-value" id="m-jobs">--</div></div>
+</div>
+</div>
 <div class="card">
-  <div class="card-header">
-    <span class="card-title">📋 Logs del Sistema</span>
-    <button class="btn btn-blue" onclick="clearLogs()">Limpiar</button>
-  </div>
-  <div class="logs" id="logs-container">
-    <div class="log-entry"><span class="log-time">--:--:--</span><span class="log-info">Esperando datos...</span></div>
-  </div>
+<div class="card-header"><span class="card-title">📋 Logs</span><button class="btn btn-blue" onclick="clearLogs()">Limpiar</button></div>
+<div class="logs" id="logs"><div class="log-e"><span class="log-t">--:--:--</span><span class="log-info">Cargando...</span></div></div>
 </div>
-
 <script>
-const API = '/torre-control';
-let autoInterval = null;
-let logs = [];
-
-async function loadAll() {
-  await Promise.all([loadServices(), loadMetrics()]);
-  document.getElementById('last-update').textContent = new Date().toLocaleTimeString('es-CO');
+const API='/torre-control';
+let autoT=null;
+let logs=[];
+function t(){return new Date().toLocaleTimeString('es-CO')}
+function log(msg,l='info'){logs.unshift({t:t(),msg,l});if(logs.length>100)logs.pop();renderLogs()}
+function renderLogs(){document.getElementById('logs').innerHTML=logs.map(l=>`<div class="log-e"><span class="log-t">${l.t}</span><span class="log-${l.l}">${l.msg}</span></div>`).join('')}
+function clearLogs(){logs=[];renderLogs()}
+async function loadAll(){
+try{
+const[s,m]=await Promise.all([fetch(API+'/status').then(r=>r.json()),fetch(API+'/metrics').then(r=>r.json())]);
+renderServices(s);
+document.getElementById('m-companies').textContent=m.companies??'--';
+document.getElementById('m-contacts').textContent=m.contacts??'--';
+document.getElementById('m-emails').textContent=m.emails_sent??'--';
+document.getElementById('m-jobs').textContent=m.active_jobs??'--';
+document.getElementById('updated').textContent=t();
+log('Datos actualizados','ok');
+}catch(e){log('Error: '+e.message,'err')}
 }
-
-async function loadServices() {
-  try {
-    const res = await fetch(`${API}/status`);
-    const data = await res.json();
-    renderServices(data);
-    updateOverall(data);
-    addLog('Servicios verificados', 'ok');
-  } catch (e) {
-    addLog('Error cargando servicios: ' + e.message, 'err');
-  }
+function renderServices(s){
+const g=document.getElementById('services');
+const sv=[
+{k:'database',icon:'🗄️',title:'Base de Datos',desc:'PostgREST + Supabase'},
+{k:'email',icon:'📧',title:'Email (Resend)',desc:'Envío de correos'},
+{k:'scraper',icon:'🕷️',title:'Google Maps Scraper',desc:'Descubrimiento'},
+{k:'api',icon:'⚡',title:'API Mapache',desc:'FastAPI + Vercel'}
+];
+g.innerHTML=sv.map(x=>{
+const d=s.services?.[x.k]||{};
+const st=d.status||'warn';
+const pc=st==='ok'?'on':st==='error'?'off':'warn';
+const pt=st==='ok'?'Operativo':st==='error'?'Error':'Sin datos';
+return`<div class="card"><div class="card-header"><div><div class="card-title">${x.title}</div><div style="font-size:18px;margin-top:4px">${x.icon} ${d.message||''}</div></div><span class="pill ${pc}">${pt}</span></div><div class="card-sub">${x.desc}</div>${d.latency?`<div class="card-sub" style="margin-top:6px">Latencia: <strong>${d.latency}ms</strong></div>`:''}${d.detail?`<div class="card-sub" style="color:var(--yellow);margin-top:4px">${d.detail}</div>`:''}</div>`;
+}).join('');
+const allOk=Object.values(s.services||{}).every(v=>v.status==='ok');
+const p=document.getElementById('overall');
+p.textContent=allOk?'Todos operativos':'Atención requerida';
+p.className='pill '+(allOk?'on':'warn');
 }
-
-async function loadMetrics() {
-  try {
-    const res = await fetch(`${API}/metrics`);
-    const data = await res.json();
-    document.getElementById('metric-companies').textContent = data.companies ?? '--';
-    document.getElementById('metric-contacts').textContent = data.contacts ?? '--';
-    document.getElementById('metric-emails').textContent = data.emails_sent ?? '--';
-    document.getElementById('metric-jobs').textContent = data.active_jobs ?? '--';
-  } catch (e) {
-    addLog('Error cargando métricas: ' + e.message, 'err');
-  }
+async function toggleAuto(){
+if(autoT){clearInterval(autoT);autoT=null;document.getElementById('auto-txt').textContent='OFF'}
+else{autoT=setInterval(loadAll,10000);document.getElementById('auto-txt').textContent='ON'}
 }
-
-function renderServices(data) {
-  const grid = document.getElementById('services-grid');
-  const services = [
-    { key: 'database', icon: '🗄️', title: 'Base de Datos', desc: 'PostgREST + Supabase' },
-    { key: 'email', icon: '📧', title: 'Email (Resend)', desc: 'Envío de correos' },
-    { key: 'scraper', icon: '🕷️', title: 'Google Maps Scraper', desc: 'Descubrimiento' },
-    { key: 'api', icon: '⚡', title: 'API Mapache', desc: 'FastAPI + Vercel' },
-  ];
-  
-  grid.innerHTML = services.map(s => {
-    const st = data.services?.[s.key] || {};
-    const status = st.status || 'unknown';
-    const pillClass = status === 'ok' ? 'on' : status === 'error' ? 'off' : 'warn';
-    const pillText = status === 'ok' ? 'Operativo' : status === 'error' ? 'Error' : 'Verificando';
-    const canToggle = s.key === 'scraper';
-    return `
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">${s.title}</div>
-            <div style="font-size: 20px; margin-top: 4px;">${s.icon} ${st.message || ''}</div>
-          </div>
-          <span class="pill ${pillClass}">${pillText}</span>
-        </div>
-        <div class="card-sub">${s.desc}</div>
-        ${st.latency ? `<div class="card-sub" style="margin-top:8px;">Latencia: <strong>${st.latency}ms</strong></div>` : ''}
-        ${st.detail ? `<div class="card-sub" style="color:var(--yellow);margin-top:4px;">${st.detail}</div>` : ''}
-        ${canToggle ? `
-          <div style="margin-top:16px; display:flex; gap:8px;">
-            <button class="btn btn-on" onclick="toggleService('scraper', 'start')">▶ Encender</button>
-            <button class="btn btn-off" onclick="toggleService('scraper', 'stop')">⏹ Apagar</button>
-          </div>
-        ` : ''}
-      </div>
-    `;
-  }).join('');
-}
-
-function updateOverall(data) {
-  const services = data.services || {};
-  const allOk = Object.values(services).every(s => s.status === 'ok');
-  const pill = document.getElementById('overall-pill');
-  pill.textContent = allOk ? 'Todos operativos' : 'Atención requerida';
-  pill.className = 'pill ' + (allOk ? 'on' : 'warn');
-}
-
-async function toggleService(service, action) {
-  try {
-    addLog(`${action === 'start' ? 'Encendiendo' : 'Apagando'} ${service}...`, 'info');
-    const res = await fetch(`${API}/services/${service}/${action}`, { method: 'POST' });
-    const data = await res.json();
-    addLog(data.message || 'Completado', data.success ? 'ok' : 'err');
-    loadAll();
-  } catch (e) {
-    addLog('Error: ' + e.message, 'err');
-  }
-}
-
-function addLog(msg, level = 'info') {
-  const time = new Date().toLocaleTimeString('es-CO');
-  logs.unshift({ time, msg, level });
-  if (logs.length > 100) logs.pop();
-  renderLogs();
-}
-
-function renderLogs() {
-  const container = document.getElementById('logs-container');
-  container.innerHTML = logs.map(l => `
-    <div class="log-entry">
-      <span class="log-time">${l.time}</span>
-      <span class="log-${l.level}">${l.msg}</span>
-    </div>
-  `).join('');
-}
-
-function clearLogs() { logs = []; renderLogs(); }
-
-function toggleAuto() {
-  if (autoInterval) {
-    clearInterval(autoInterval);
-    autoInterval = null;
-    document.getElementById('auto-status').textContent = 'OFF';
-  } else {
-    autoInterval = setInterval(loadAll, 10000);
-    document.getElementById('auto-status').textContent = 'ON';
-  }
-}
-
-// Carga inicial
 loadAll();
-autoInterval = setInterval(loadAll, 10000);
+autoT=setInterval(loadAll,10000);
 </script>
 </body>
 </html>"""
@@ -332,210 +139,78 @@ autoInterval = setInterval(loadAll, 10000);
 
 @router.get("/", response_class=HTMLResponse)
 async def dashboard() -> str:
-    """Dashboard principal de la torre de control."""
     return DASHBOARD_HTML
 
 
 @router.get("/status")
-async def torre_status() -> dict[str, Any]:
-    """Estado de todos los servicios (público para el dashboard)."""
+async def status() -> dict[str, Any]:
     results: dict[str, Any] = {"services": {}, "timestamp": datetime.now(UTC).isoformat()}
-    
-    # 1) Base de datos (PostgREST)
+    settings = get_settings()
+
+    # 1) Database
     t0 = time.time()
     try:
-        settings = get_settings()
         if settings.supabase_url and settings.supabase_service_role_key_value:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(
-                    settings.supabase_url.rstrip("/") + "/rest/v1/alembic_version?select=version_num&limit=1",
-                    headers={
-                        "apikey": settings.supabase_service_role_key_value,
-                        "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
-                    },
+            async with httpx.AsyncClient(timeout=5.0) as c:
+                r = await c.get(
+                    f"{settings.supabase_url.rstrip('/')}/rest/v1/alembic_version?select=version_num&limit=1",
+                    headers={"apikey": settings.supabase_service_role_key_value, "Authorization": f"Bearer {settings.supabase_service_role_key_value}"},
                 )
-                latency = int((time.time() - t0) * 1000)
-                if resp.status_code == 200:
-                    results["services"]["database"] = {
-                        "status": "ok",
-                        "latency": latency,
-                        "message": "Conectado",
-                    }
-                else:
-                    results["services"]["database"] = {
-                        "status": "error",
-                        "latency": latency,
-                        "message": f"HTTP {resp.status_code}",
-                    }
+                lat = int((time.time() - t0) * 1000)
+                results["services"]["database"] = {"status": "ok" if r.status_code == 200 else "error", "latency": lat, "message": "Conectado" if r.status_code == 200 else f"HTTP {r.status_code}"}
         else:
-            results["services"]["database"] = {
-                "status": "error",
-                "message": "Sin configuración",
-                "detail": "SUPABASE_URL o SERVICE_ROLE_KEY faltantes",
-            }
+            results["services"]["database"] = {"status": "error", "message": "Sin config"}
     except Exception as e:
-        results["services"]["database"] = {
-            "status": "error",
-            "message": "Sin conexión",
-            "detail": str(e)[:100],
-        }
-    
-    # 2) Email (Resend)
+        results["services"]["database"] = {"status": "error", "message": str(e)[:80]}
+
+    # 2) Resend
     t0 = time.time()
     try:
-        settings = get_settings()
         if settings.resend_api_key_value:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(
-                    "https://api.resend.com/api-keys",
-                    headers={"Authorization": f"Bearer {settings.resend_api_key_value}"},
-                )
-                latency = int((time.time() - t0) * 1000)
-                results["services"]["email"] = {
-                    "status": "ok" if resp.status_code == 200 else "error",
-                    "latency": latency,
-                    "message": "Resend OK" if resp.status_code == 200 else f"HTTP {resp.status_code}",
-                }
+            async with httpx.AsyncClient(timeout=5.0) as c:
+                r = await c.get("https://api.resend.com/api-keys", headers={"Authorization": f"Bearer {settings.resend_api_key_value}"})
+                lat = int((time.time() - t0) * 1000)
+                results["services"]["email"] = {"status": "ok" if r.status_code == 200 else "error", "latency": lat, "message": "Resend OK" if r.status_code == 200 else f"HTTP {r.status_code}"}
         else:
-            results["services"]["email"] = {
-                "status": "error",
-                "message": "Sin API key",
-                "detail": "RESEND_API_KEY no configurada",
-            }
+            results["services"]["email"] = {"status": "error", "message": "Sin API key"}
     except Exception as e:
-        results["services"]["email"] = {
-            "status": "error",
-            "message": "Sin conexión",
-            "detail": str(e)[:100],
-        }
-    
-    # 3) Scraper (verifica vía HTTP si está corriendo)
+        results["services"]["email"] = {"status": "error", "message": str(e)[:80]}
+
+    # 3) Scraper (check via HTTP)
     t0 = time.time()
     try:
-        scraper_url = os.environ.get("SCRAPER_URL", "http://localhost:8080")
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(f"{scraper_url}/health")
-            latency = int((time.time() - t0) * 1000)
-            results["services"]["scraper"] = {
-                "status": "ok" if resp.status_code == 200 else "error",
-                "latency": latency,
-                "message": "Corriendo" if resp.status_code == 200 else f"HTTP {resp.status_code}",
-            }
+        scraper_url = os.environ.get("SCRAPER_URL", "")
+        if scraper_url:
+            async with httpx.AsyncClient(timeout=3.0) as c:
+                r = await c.get(f"{scraper_url}/health")
+                lat = int((time.time() - t0) * 1000)
+                results["services"]["scraper"] = {"status": "ok" if r.status_code == 200 else "error", "latency": lat, "message": "Corriendo" if r.status_code == 200 else f"HTTP {r.status_code}"}
+        else:
+            results["services"]["scraper"] = {"status": "warn", "message": "No configurado", "detail": "SCRAPER_URL no definida"}
     except Exception:
-        results["services"]["scraper"] = {
-            "status": "warn",
-            "message": "Detenido",
-            "detail": "No responde en " + os.environ.get("SCRAPER_URL", "http://localhost:8080"),
-        }
-    
-    # 4) API Mapache
+        results["services"]["scraper"] = {"status": "warn", "message": "Detenido", "detail": "No responde"}
+
+    # 4) API self-check
     t0 = time.time()
     try:
-        settings = get_settings()
-        base_url = settings.public_base_url or "http://localhost:8000"
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{base_url}/health")
-            latency = int((time.time() - t0) * 1000)
-            results["services"]["api"] = {
-                "status": "ok" if resp.status_code == 200 else "error",
-                "latency": latency,
-                "message": "API respondiendo" if resp.status_code == 200 else f"HTTP {resp.status_code}",
-            }
+        base = settings.public_base_url or "http://localhost:8000"
+        async with httpx.AsyncClient(timeout=5.0) as c:
+            r = await c.get(f"{base}/health")
+            lat = int((time.time() - t0) * 1000)
+            results["services"]["api"] = {"status": "ok" if r.status_code == 200 else "error", "latency": lat, "message": "OK" if r.status_code == 200 else f"HTTP {r.status_code}"}
     except Exception as e:
-        results["services"]["api"] = {
-            "status": "error",
-            "message": "Sin conexión",
-            "detail": str(e)[:100],
-        }
-    
+        results["services"]["api"] = {"status": "error", "message": str(e)[:80]}
+
     return results
 
 
 @router.get("/metrics")
-async def torre_metrics() -> dict[str, Any]:
-    """Métricas de la base de datos (público para el dashboard)."""
-    metrics = {"companies": 0, "contacts": 0, "emails_sent": 0, "active_jobs": 0}
-    
-    try:
-        from app.core.postgrest_client import pg_count
-        
-        metrics["companies"] = await pg_count("companies")
-        metrics["contacts"] = await pg_count("contacts") 
-        metrics["emails_sent"] = await pg_count("email_messages", {"direction": "eq.OUTBOUND"})
-        metrics["active_jobs"] = await pg_count("jobs", {"status": "eq.QUEUED"})
-    except Exception as e:
-        logger.error("metrics_error", error=str(e))
-    
-    return metrics
+async def metrics() -> dict[str, Any]:
+    from app.core.postgrest_client import pg_count
 
-
-@router.post("/services/scraper/{action}")
-async def control_scraper(action: str) -> dict[str, Any]:
-    """Controla el servicio de scraping vía HTTP.
-    
-    En Vercel serverless no se pueden usar subprocess. En su lugar,
-    enviamos un request HTTP al scraper para iniciarlo o detenerlo.
-    El scraper debe estar corriendo en una máquina local o VPS.
-    """
-    if action not in ("start", "stop"):
-        raise HTTPException(status_code=400, detail="Acción inválida: use 'start' o 'stop'")
-    
-    scraper_url = os.environ.get("SCRAPER_URL", "http://localhost:8080")
-    
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            if action == "start":
-                resp = await client.post(f"{scraper_url}/start")
-                return {
-                    "success": resp.status_code == 200,
-                    "message": f"Señal de inicio enviada al scraper" if resp.status_code == 200 else f"Error: HTTP {resp.status_code}",
-                }
-            else:
-                resp = await client.post(f"{scraper_url}/stop")
-                return {
-                    "success": resp.status_code == 200,
-                    "message": f"Señal de detención enviada al scraper" if resp.status_code == 200 else f"Error: HTTP {resp.status_code}",
-                }
-    except Exception as e:
-        return {
-            "success": False,
-            "message": f"No se conectar al scraper en {scraper_url}: {e}",
-        }
-
-
-@router.post("/services/database/test")
-async def test_database() -> dict[str, Any]:
-    """Prueba la conexión a la base de datos."""
-    try:
-        from app.core.postgrest_client import pg_select
-        result = await pg_select("alembic_version", columns="version_num", limit=1)
-        return {"success": True, "message": f"DB OK. Versión: {result[0].get('version_num', 'N/A') if result else 'N/A'}"}
-    except Exception as e:
-        return {"success": False, "message": str(e)}
-
-
-@router.post("/services/email/test")
-async def test_email() -> dict[str, Any]:
-    """Prueba el envío de email."""
-    settings = get_settings()
-    if not settings.resend_api_key_value:
-        return {"success": False, "message": "Resend API key no configurada"}
-    
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                "https://api.resend.com/emails",
-                headers={
-                    "Authorization": f"Bearer {settings.resend_api_key_value}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "from": "Mapache CRM <hola@veyrasoluciones.com>",
-                    "to": "edwin@veyrasoluciones.com",
-                    "subject": "Test desde Torre de Control",
-                    "text": f"Email de prueba enviado a las {datetime.now(UTC).isoformat()}",
-                },
-            )
-            return {"success": resp.status_code == 200, "message": f"HTTP {resp.status_code}"}
-    except Exception as e:
-        return {"success": False, "message": str(e)}
+    return {
+        "companies": await pg_count("companies"),
+        "contacts": await pg_count("contacts"),
+        "emails_sent": await pg_count("email_messages", {"direction": "OUTBOUND"}),
+        "active_jobs": await pg_count("jobs", {"status": "QUEUED"}),
+    }
