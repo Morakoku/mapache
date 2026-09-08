@@ -29,6 +29,7 @@ from app.routers import (
     leads,
     metrics,
     pipeline,
+    public_dashboard,
     scraping,
     searches,
     sequences,
@@ -101,5 +102,6 @@ api_router.include_router(followups.router, prefix="/follow-ups", tags=["seguimi
 public_router.include_router(tracking.router, prefix="/tracking", tags=["tracking"])
 public_router.include_router(auth.router, prefix="/auth", tags=["oauth"])
 public_router.include_router(email_simple.router, prefix="/email-simple-public", tags=["email-simple-public"])
+public_router.include_router(public_dashboard.router, prefix="/api/v1/tc", tags=["public-dashboard"])
 
 __all__ = ["api_router", "public_router"]
