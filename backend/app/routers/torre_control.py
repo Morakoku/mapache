@@ -381,10 +381,16 @@ async def dashboard() -> str:
     return DASHBOARD_HTML
 
 
-@router.get("/api/v1/torre-control/status")
-async def torre_status() -> dict[str, Any]:
-    """Estado de todos los servicios."""
-    results: dict[str, Any] = {"services": {}, "timestamp": datetime.now(UTC).isoformat()}
+@router.get("/status")
+async def torre_status_public() -> dict[str, Any]:
+    """Estado de todos los servicios (público para el dashboard)."""
+    return await torre_status()
+
+
+@router.get("/metrics")
+async def torre_metrics_public() -> dict[str, Any]:
+    """Métricas de la base de datos (público para el dashboard)."""
+    return await torre_metrics()
     
     # 1) Base de datos (PostgREST)
     t0 = time.time()
