@@ -23,14 +23,14 @@ router = APIRouter(dependencies=[Depends(require_idempotency)])
 
 
 @router.get("", response_model=list[SearchOut])
-async def list_searches(db: AsyncSession = Depends(get_db)) -> list[SearchOut]:
+async def list_searches(db: AsyncSession | None = Depends(get_db)) -> list[SearchOut]:
     return [SearchOut.model_validate(s) for s in await SearchService(db).list_all()]
 
 
 @router.post("", response_model=SearchOut, status_code=status.HTTP_201_CREATED)
 async def create_search(
     payload: SearchIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> SearchOut:
     search = await SearchService(db).create(payload.model_dump())
     await db.commit()
@@ -40,7 +40,7 @@ async def create_search(
 @router.get("/{search_id}", response_model=SearchOut)
 async def get_search(
     search_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> SearchOut:
     return SearchOut.model_validate(await SearchService(db).get_or_404(search_id))
 
@@ -49,7 +49,7 @@ async def get_search(
 async def update_search(
     search_id: uuid.UUID,
     payload: SearchUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> SearchOut:
     search = await SearchService(db).update(search_id, payload.model_dump(exclude_unset=True))
     await db.commit()
@@ -62,7 +62,7 @@ async def update_search(
 @router.delete("/{search_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_search(
     search_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> None:
     await SearchService(db).delete(search_id)
     await db.commit()
@@ -79,7 +79,7 @@ async def run_search(
         default=None,
         description="google_maps_scraper | google_places_api | instagram_serp | linkedin_serp",
     ),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> JobAcceptedOut:
     """Lanza la búsqueda en background.
 
@@ -127,7 +127,7 @@ async def run_search(
 @router.get("/{search_id}/runs", response_model=list[SearchRunOut])
 async def list_runs(
     search_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[SearchRunOut]:
     service = SearchService(db)
     await service.get_or_404(search_id)

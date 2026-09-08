@@ -44,7 +44,7 @@ async def list_scripts(
     script_type: CallScriptType | None = None,
     service_id: uuid.UUID | None = None,
     include_inactive: bool = False,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[CallScriptOut]:
     service = CallService(db)
     stmt = service.build_script_query(
@@ -55,7 +55,7 @@ async def list_scripts(
 
 
 @scripts_router.post("", response_model=CallScriptOut, status_code=status.HTTP_201_CREATED)
-async def create_script(payload: CallScriptIn, db: AsyncSession = Depends(get_db)) -> CallScriptOut:
+async def create_script(payload: CallScriptIn, db: AsyncSession | None = Depends(get_db)) -> CallScriptOut:
     data = payload.model_dump()
     script = await CallService(db).create_script(data)
     await db.commit()
@@ -64,7 +64,7 @@ async def create_script(payload: CallScriptIn, db: AsyncSession = Depends(get_db
 
 
 @scripts_router.get("/{script_id}", response_model=CallScriptOut)
-async def get_script(script_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> CallScriptOut:
+async def get_script(script_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> CallScriptOut:
     return CallScriptOut.model_validate(await CallService(db).get_script_or_404(script_id))
 
 
@@ -72,7 +72,7 @@ async def get_script(script_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -
 async def update_script(
     script_id: uuid.UUID,
     payload: CallScriptUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> CallScriptOut:
     service = CallService(db)
     script = await service.get_script_or_404(script_id)
@@ -86,7 +86,7 @@ async def update_script(
 
 
 @scripts_router.delete("/{script_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_script(script_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_script(script_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> None:
     service = CallService(db)
     script = await service.get_script_or_404(script_id)
     if script.is_system:
@@ -106,7 +106,7 @@ async def call_brief(
     lead_id: uuid.UUID,
     script_type: CallScriptType | None = None,
     script_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> CallBriefOut:
     """Prepara la llamada a un prospecto.
 
@@ -122,7 +122,7 @@ async def call_brief(
 async def log_call(
     lead_id: uuid.UUID,
     payload: CallLogIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> CallLogResultOut:
     """Registra lo que pasó en la llamada.
 
@@ -182,7 +182,7 @@ async def list_calls(
     outcome: CallOutcome | None = None,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[CallLogOut]:
     service = CallService(db)
     stmt = service.build_log_query(lead_id=lead_id, outcome=outcome)

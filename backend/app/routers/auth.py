@@ -57,7 +57,7 @@ async def callback(
     state: str | None = None,
     error: str | None = None,
     error_description: str | None = Query(default=None),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> HTMLResponse | RedirectResponse:
     """Recibe el `code`, lo cambia por tokens y guarda la cuenta."""
     provider_type = _provider_or_400(provider)
@@ -111,7 +111,7 @@ async def callback(
 async def disconnect(
     provider: str,
     account_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> dict[str, bool]:
     """Revoca el token **en el proveedor** y borra la cuenta."""
     _provider_or_400(provider)
@@ -125,7 +125,7 @@ async def disconnect(
     response_model=list[EmailAccountOut],
     dependencies=[Depends(SERVICE_BEARER)],
 )
-async def list_connected(db: AsyncSession = Depends(get_db)) -> list[EmailAccountOut]:
+async def list_connected(db: AsyncSession | None = Depends(get_db)) -> list[EmailAccountOut]:
     accounts = await EmailAccountService(db).list_accounts()
     return [EmailAccountOut.model_validate(a) for a in accounts]
 

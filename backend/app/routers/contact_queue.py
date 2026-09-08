@@ -58,7 +58,7 @@ def _generate_message(company_name: str, category: str | None, channel: str) -> 
 async def get_contact_queue(
     min_score: int = 0,
     limit: int = 50,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[ContactQueueOut]:
     stmt = (
         select(Lead, Company, Contact)
@@ -120,7 +120,7 @@ async def record_contact_attempt(
     channel: str = "phone",
     result: str = "no_response",
     notes: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> dict[str, str]:
     lead = await db.get(Lead, lead_id)
     if not lead:

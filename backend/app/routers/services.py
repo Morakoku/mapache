@@ -36,7 +36,7 @@ router = APIRouter(dependencies=[Depends(require_idempotency)])
 @router.get("", response_model=list[ServiceOut])
 async def list_services(
     only_active: bool = Query(default=False),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[ServiceOut]:
     services = await CatalogService(db).list_all(only_active=only_active)
     return [ServiceOut.model_validate(s) for s in services]
@@ -56,7 +56,7 @@ async def list_opportunity_signals() -> list[SignalOption]:
 @router.post("", response_model=ServiceOut, status_code=status.HTTP_201_CREATED)
 async def create_service(
     payload: ServiceIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ServiceOut:
     service = await CatalogService(db).create(payload.model_dump())
     await db.commit()
@@ -66,7 +66,7 @@ async def create_service(
 @router.get("/{service_id}", response_model=ServiceOut)
 async def get_service(
     service_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ServiceOut:
     return ServiceOut.model_validate(await CatalogService(db).get_or_404(service_id))
 
@@ -75,7 +75,7 @@ async def get_service(
 async def update_service(
     service_id: uuid.UUID,
     payload: ServiceUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ServiceOut:
     service = await CatalogService(db).update(service_id, payload.model_dump(exclude_unset=True))
     await db.commit()
@@ -88,7 +88,7 @@ async def update_service(
 @router.delete("/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_service(
     service_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> None:
     await CatalogService(db).delete(service_id)
     await db.commit()
@@ -100,7 +100,7 @@ async def delete_service(
 @router.get("/{service_id}/prospect-plan/cities", response_model=list[str])
 async def suggest_cities(
     service_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[str]:
     """Ciudades donde ya hay empresas, de más a menos.
 
@@ -115,7 +115,7 @@ async def suggest_cities(
 async def build_prospect_plan(
     service_id: uuid.UUID,
     payload: ProspectPlanIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ProspectPlanOut:
     """Propone qué buscar para vender este servicio, sin ejecutar nada.
 
@@ -137,7 +137,7 @@ async def build_prospect_plan(
 async def run_prospect_plan(
     service_id: uuid.UUID,
     payload: ProspectPlanIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ProspectPlanRunOut:
     """Crea las búsquedas del plan y las lanza todas."""
     service = await CatalogService(db).get_or_404(service_id)
@@ -194,7 +194,7 @@ def _plan_out(plan: ProspectPlan) -> ProspectPlanOut:
 async def top_prospects(
     service_id: uuid.UUID,
     limit: int = Query(default=20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[TopProspectOut]:
     """Los mejores prospectos de este servicio, con lo que los justifica.
 

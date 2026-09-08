@@ -29,7 +29,7 @@ async def list_entries(
     q: str | None = None,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[SuppressionOut]:
     service = SuppressionService(db)
     items, total = await SuppressionRepository(db).paginate(
@@ -41,7 +41,7 @@ async def list_entries(
 @router.post("", response_model=SuppressionOut, status_code=status.HTTP_201_CREATED)
 async def add_entry(
     payload: SuppressionIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> SuppressionOut:
     entry = await SuppressionService(db).add(
         email=payload.email,
@@ -54,7 +54,7 @@ async def add_entry(
 
 
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_entry(entry_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
+async def remove_entry(entry_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> None:
     """Quita una entrada.
 
     Existe porque un rebote temporal mal clasificado no debe condenar a un
@@ -67,7 +67,7 @@ async def remove_entry(entry_id: uuid.UUID, db: AsyncSession = Depends(get_db)) 
 @router.post("/import", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def import_csv(
     file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> dict[str, int]:
     """Importa un CSV con columnas `email` y/o `domain`.
 

@@ -59,7 +59,7 @@ def _looks_like_bot(user_agent: str | None, sent_at: datetime | None) -> bool:
 async def track_open(
     token: uuid.UUID,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Response:
     """Pixel de apertura.
 
@@ -141,7 +141,7 @@ async def track_open(
 async def track_click(
     token: uuid.UUID,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Response:
     """Registra el click y redirige al destino real.
 
@@ -207,7 +207,7 @@ async def track_click(
 
 
 @router.get("/unsubscribe/{token}", response_class=HTMLResponse, include_in_schema=False)
-async def unsubscribe_page(token: uuid.UUID, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def unsubscribe_page(token: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> HTMLResponse:
     """Página de confirmación de baja."""
     result = await db.execute(select(EmailMessage).where(EmailMessage.unsubscribe_token == token))
     email = result.scalar_one_or_none()
@@ -223,7 +223,7 @@ async def unsubscribe_page(token: uuid.UUID, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/unsubscribe/{token}", include_in_schema=False)
-async def unsubscribe(token: uuid.UUID, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def unsubscribe(token: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> HTMLResponse:
     """Procesa la baja.
 
     Acepta también el POST automático de `List-Unsubscribe-Post` (RFC 8058),

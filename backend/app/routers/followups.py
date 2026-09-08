@@ -47,7 +47,7 @@ async def list_follow_ups(
     due_after: datetime | None = None,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[FollowUpOut]:
     service = FollowUpService(db)
     stmt = service.build_list_query(
@@ -60,7 +60,7 @@ async def list_follow_ups(
 @router.post("", response_model=FollowUpOut, status_code=status.HTTP_201_CREATED)
 async def create_follow_up(
     payload: FollowUpIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> FollowUpOut:
     """Seguimiento manual: "recuérdame escribirle el martes"."""
     follow_up = await FollowUpService(db).create_manual(payload.model_dump())
@@ -72,7 +72,7 @@ async def create_follow_up(
 async def update_follow_up(
     follow_up_id: uuid.UUID,
     payload: FollowUpUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> FollowUpOut:
     follow_up = await FollowUpService(db).update(
         follow_up_id, payload.model_dump(exclude_unset=True)
@@ -84,7 +84,7 @@ async def update_follow_up(
 @router.post("/{follow_up_id}/skip", response_model=FollowUpOut)
 async def skip_follow_up(
     follow_up_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> FollowUpOut:
     """Salta este envío pero deja viva la secuencia."""
     follow_up = await FollowUpService(db).skip(follow_up_id)
@@ -93,14 +93,14 @@ async def skip_follow_up(
 
 
 @router.delete("/{follow_up_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def cancel_follow_up(follow_up_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
+async def cancel_follow_up(follow_up_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> None:
     """Cancela el seguimiento. No se borra: queda el rastro de que existió."""
     await FollowUpService(db).cancel(follow_up_id)
     await db.commit()
 
 
 @router.post("/run", response_model=JobAcceptedOut, status_code=status.HTTP_202_ACCEPTED)
-async def run_now(db: AsyncSession = Depends(get_db)) -> JobAcceptedOut:
+async def run_now(db: AsyncSession | None = Depends(get_db)) -> JobAcceptedOut:
     """Ejecuta la tanda de seguimientos vencidos ahora mismo.
 
     En marcha normal esto lo dispara el planificador cada 15 minutos; el

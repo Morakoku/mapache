@@ -26,7 +26,7 @@ async def list_jobs(
     job_type: JobType | None = None,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[JobOut]:
     stmt = select(Job).order_by(Job.created_at.desc())
     if status_filter is not None:
@@ -41,7 +41,7 @@ async def list_jobs(
 @router.get("/{job_id}", response_model=JobOut)
 async def get_job(
     job_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> JobOut:
     return JobOut.model_validate(await JobService(db).get_or_404(job_id))
 
@@ -49,7 +49,7 @@ async def get_job(
 @router.post("/{job_id}/cancel", response_model=JobOut)
 async def cancel_job(
     job_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> JobOut:
     service = JobService(db)
     job = await service.get_or_404(job_id)
@@ -67,7 +67,7 @@ async def cancel_job(
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def check_provider_health(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> JobAcceptedOut:
     """Lanza el canario del proveedor de descubrimiento (§4.8.6).
 

@@ -27,7 +27,7 @@ router = APIRouter()
 @router.get("/prospects")
 async def prospects(
     limit: int = Query(default=200, ge=1, le=1000),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> dict[str, object]:
     """Prospectos de Guaki con clasificación, vínculo y resumen del embudo."""
     items, summary = await GuakiProspectService(db).prospects(limit)
@@ -36,7 +36,7 @@ async def prospects(
 
 @router.get("/funnel")
 async def funnel(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> dict[str, object]:
     """Embudo comercial de Guaki (detectados → … → pagos) con métricas reales."""
     return await GuakiProspectService(db).funnel()
@@ -46,7 +46,7 @@ async def funnel(
 async def link_prospect(
     lead_id: uuid.UUID,
     payload: GuakiLinkIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> dict[str, object]:
     """Registra/actualiza el vínculo de un prospecto con un negocio de Guaki."""
     exists = await db.scalar(select(Lead.id).where(Lead.id == lead_id))
@@ -62,7 +62,7 @@ async def link_prospect(
 @router.post("/link/match")
 async def link_match(
     payload: GuakiMatchIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> dict[str, object]:
     """Dado un negocio registrado en Guaki, devuelve los prospectos candidatos."""
     candidates = await GuakiLinkService(db).find_candidates(payload.model_dump())

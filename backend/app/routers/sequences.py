@@ -49,7 +49,7 @@ def _to_preview(preview: SchedulePreview) -> SchedulePreviewOut:
 @router.get("", response_model=list[SequenceOut])
 async def list_sequences(
     active_only: bool = Query(default=False),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[SequenceOut]:
     service = SequenceService(db)
     result = await db.execute(service.build_list_query(active_only=active_only))
@@ -57,7 +57,7 @@ async def list_sequences(
 
 
 @router.post("", response_model=SequenceOut, status_code=status.HTTP_201_CREATED)
-async def create_sequence(payload: SequenceIn, db: AsyncSession = Depends(get_db)) -> SequenceOut:
+async def create_sequence(payload: SequenceIn, db: AsyncSession | None = Depends(get_db)) -> SequenceOut:
     data = payload.model_dump()
     data["steps"] = [{**step, "condition": step.get("condition")} for step in data.get("steps", [])]
     sequence = await SequenceService(db).create(data)
@@ -66,7 +66,7 @@ async def create_sequence(payload: SequenceIn, db: AsyncSession = Depends(get_db
 
 
 @router.get("/{sequence_id}", response_model=SequenceOut)
-async def get_sequence(sequence_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> SequenceOut:
+async def get_sequence(sequence_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> SequenceOut:
     return SequenceOut.model_validate(await SequenceService(db).get_or_404(sequence_id))
 
 
@@ -74,7 +74,7 @@ async def get_sequence(sequence_id: uuid.UUID, db: AsyncSession = Depends(get_db
 async def update_sequence(
     sequence_id: uuid.UUID,
     payload: SequenceUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> SequenceOut:
     """Edita la secuencia.
 
@@ -87,7 +87,7 @@ async def update_sequence(
 
 
 @router.delete("/{sequence_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_sequence(sequence_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_sequence(sequence_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> None:
     """Borra la secuencia y cancela sus seguimientos pendientes."""
     await SequenceService(db).delete(sequence_id)
     await db.commit()
@@ -97,7 +97,7 @@ async def delete_sequence(sequence_id: uuid.UUID, db: AsyncSession = Depends(get
 async def preview_schedule(
     sequence_id: uuid.UUID,
     payload: EnrollIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[SchedulePreviewOut]:
     """Calendario previsto, sin escribir nada.
 
@@ -113,7 +113,7 @@ async def preview_schedule(
 async def enroll(
     sequence_id: uuid.UUID,
     payload: EnrollIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> EnrollResultOut:
     """Inscribe prospectos y programa el primer paso.
 

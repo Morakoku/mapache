@@ -39,7 +39,7 @@ async def list_contacts(
     contactable: bool | None = None,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[ContactOut]:
     service = ContactService(db)
     stmt = service.build_list_query(
@@ -50,14 +50,14 @@ async def list_contacts(
 
 
 @contacts_router.post("", response_model=ContactOut, status_code=status.HTTP_201_CREATED)
-async def create_contact(payload: ContactIn, db: AsyncSession = Depends(get_db)) -> ContactOut:
+async def create_contact(payload: ContactIn, db: AsyncSession | None = Depends(get_db)) -> ContactOut:
     contact = await ContactService(db).create(payload.model_dump())
     await db.commit()
     return ContactOut.model_validate(contact)
 
 
 @contacts_router.get("/{contact_id}", response_model=ContactOut)
-async def get_contact(contact_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> ContactOut:
+async def get_contact(contact_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> ContactOut:
     return ContactOut.model_validate(await ContactService(db).get_or_404(contact_id))
 
 
@@ -65,7 +65,7 @@ async def get_contact(contact_id: uuid.UUID, db: AsyncSession = Depends(get_db))
 async def update_contact(
     contact_id: uuid.UUID,
     payload: ContactUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ContactOut:
     contact = await ContactService(db).update(contact_id, payload.model_dump(exclude_unset=True))
     await db.commit()
@@ -76,7 +76,7 @@ async def update_contact(
 
 
 @contacts_router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_contact(contact_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_contact(contact_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> None:
     await ContactService(db).delete(contact_id)
     await db.commit()
 
@@ -84,7 +84,7 @@ async def delete_contact(contact_id: uuid.UUID, db: AsyncSession = Depends(get_d
 @contacts_router.post("/{contact_id}/primary", response_model=ContactOut)
 async def set_primary_contact(
     contact_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ContactOut:
     contact = await ContactService(db).set_primary(contact_id)
     await db.commit()
@@ -95,7 +95,7 @@ async def set_primary_contact(
 @contacts_router.post("/{contact_id}/verify-email", response_model=ContactOut)
 async def verify_contact_email(
     contact_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ContactOut:
     contact = await ContactService(db).reverify(contact_id)
     await db.commit()
@@ -113,7 +113,7 @@ async def list_activities(
     activity_type: ActivityType | None = None,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[ActivityOut]:
     service = ActivityService(db)
     stmt = service.build_timeline_query(
@@ -133,7 +133,7 @@ async def list_tasks(
     due_before: datetime | None = None,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[TaskOut]:
     service = TaskService(db)
     stmt = service.build_list_query(completed=completed, lead_id=lead_id, due_before=due_before)
@@ -142,7 +142,7 @@ async def list_tasks(
 
 
 @tasks_router.post("", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
-async def create_task(payload: TaskIn, db: AsyncSession = Depends(get_db)) -> TaskOut:
+async def create_task(payload: TaskIn, db: AsyncSession | None = Depends(get_db)) -> TaskOut:
     task = await TaskService(db).create(payload.model_dump())
     await db.commit()
     return TaskOut.model_validate(task)
@@ -152,7 +152,7 @@ async def create_task(payload: TaskIn, db: AsyncSession = Depends(get_db)) -> Ta
 async def update_task(
     task_id: uuid.UUID,
     payload: TaskUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> TaskOut:
     task = await TaskService(db).update(task_id, payload.model_dump(exclude_unset=True))
     await db.commit()
@@ -160,13 +160,13 @@ async def update_task(
 
 
 @tasks_router.post("/{task_id}/complete", response_model=TaskOut)
-async def complete_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> TaskOut:
+async def complete_task(task_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> TaskOut:
     task = await TaskService(db).complete(task_id)
     await db.commit()
     return TaskOut.model_validate(task)
 
 
 @tasks_router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_task(task_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> None:
     await TaskService(db).delete(task_id)
     await db.commit()

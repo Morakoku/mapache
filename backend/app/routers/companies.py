@@ -111,7 +111,7 @@ async def list_companies(
 
 
 @router.get("/facets", response_model=CompanyFacetsOut)
-async def company_facets(db: AsyncSession = Depends(get_db)) -> CompanyFacetsOut:
+async def company_facets(db: AsyncSession | None = Depends(get_db)) -> CompanyFacetsOut:
     """Cuántas empresas hay de cada cosa.
 
     El filtro "sin web" solo sirve si antes se sabe que hay 340 sin web. Un
@@ -198,7 +198,7 @@ async def create_company(
 @router.get("/{company_id}", response_model=CompanyDetailOut)
 async def get_company(
     company_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> CompanyDetailOut:
     company = await CompanyRepository(db).get(company_id)
     if company is None:
@@ -213,7 +213,7 @@ async def company_dossier(
         default=False,
         description="Volver a buscar en la web aunque lo guardado siga fresco",
     ),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> CompanyDossierOut:
     """Todo lo que se sabe de la empresa, en un solo sitio.
 
@@ -258,7 +258,7 @@ async def company_dossier(
 @router.delete("/{company_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_company(
     company_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> None:
     """Borrado en cascada de la empresa y todos sus datos.
 
@@ -276,7 +276,7 @@ async def delete_company(
 @router.get("/{company_id}/duplicates", response_model=list[DuplicateCandidateOut])
 async def find_duplicates(
     company_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[DuplicateCandidateOut]:
     """Posibles duplicados de esta empresa.
 
@@ -313,7 +313,7 @@ async def find_duplicates(
 )
 async def enrich_company(
     company_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> JobAcceptedOut:
     company = await CompanyRepository(db).get(company_id)
     if company is None:
@@ -334,7 +334,7 @@ async def enrich_company(
 )
 async def bulk_enrich(
     company_ids: list[uuid.UUID],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> JobAcceptedOut:
     payload = {"company_ids": [str(cid) for cid in company_ids]}
     job = await JobService(db).create(JobType.ENRICHMENT, payload, progress_total=len(company_ids))

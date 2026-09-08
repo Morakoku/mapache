@@ -25,14 +25,14 @@ router = APIRouter()
 
 
 @router.get("/stages", response_model=list[StageOut])
-async def list_stages(db: AsyncSession = Depends(get_db)) -> list[StageOut]:
+async def list_stages(db: AsyncSession | None = Depends(get_db)) -> list[StageOut]:
     return [StageOut.model_validate(s) for s in await PipelineService(db).list_stages()]
 
 
 @router.post("/stages", response_model=StageOut, status_code=status.HTTP_201_CREATED)
 async def create_stage(
     payload: StageIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> StageOut:
     stage = await PipelineService(db).create(payload.model_dump(exclude_none=True))
     await db.commit()
@@ -43,7 +43,7 @@ async def create_stage(
 async def update_stage(
     stage_id: uuid.UUID,
     payload: StageUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> StageOut:
     stage = await PipelineService(db).update(stage_id, payload.model_dump(exclude_unset=True))
     await db.commit()
@@ -54,7 +54,7 @@ async def update_stage(
 async def delete_stage(
     stage_id: uuid.UUID,
     payload: StageDeleteIn = Body(default=StageDeleteIn()),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> dict[str, int]:
     """Elimina una etapa y reubica sus prospectos.
 
@@ -69,7 +69,7 @@ async def delete_stage(
 @router.post("/stages/reorder", response_model=list[StageOut])
 async def reorder_stages(
     payload: StageReorderIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[StageOut]:
     stages = await PipelineService(db).reorder(payload.ordered_ids)
     await db.commit()
@@ -80,7 +80,7 @@ async def reorder_stages(
 async def get_board(
     service_id: uuid.UUID | None = None,
     per_stage: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> BoardOut:
     """Tablero completo.
 

@@ -77,7 +77,7 @@ async def overview(
     from_: date | None = Query(default=None, alias="from"),
     to: date | None = None,
     service_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> OverviewOut:
     """Contadores del panel principal (§13.1)."""
     period = _period(from_, to)
@@ -94,7 +94,7 @@ async def funnel(
     from_: date | None = Query(default=None, alias="from"),
     to: date | None = None,
     service_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> FunnelOut:
     """Embudo de empresa encontrada a cliente, con conversión paso a paso.
 
@@ -118,7 +118,7 @@ async def email_metrics(
     from_: date | None = Query(default=None, alias="from"),
     to: date | None = None,
     service_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> EmailMetricsOut:
     """Tasas de correo (§13.2).
 
@@ -133,7 +133,7 @@ async def email_metrics(
 async def by_template(
     from_: date | None = Query(default=None, alias="from"),
     to: date | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[TemplatePerformanceOut]:
     """Rendimiento comparado de plantillas: el test A/B implícito."""
     rows = await MetricsService(db).by_template(_period(from_, to))
@@ -155,7 +155,7 @@ async def by_template(
 async def by_service(
     from_: date | None = Query(default=None, alias="from"),
     to: date | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[ServicePerformanceOut]:
     """Qué servicio se vende mejor."""
     rows = await MetricsService(db).by_service(_period(from_, to))
@@ -178,7 +178,7 @@ async def by_city(
     from_: date | None = Query(default=None, alias="from"),
     to: date | None = None,
     limit: int = Query(default=20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[CityPerformanceOut]:
     """Dónde está el mercado real, que no siempre es dónde se buscó."""
     rows = await MetricsService(db).by_city(_period(from_, to), limit=limit)
@@ -198,7 +198,7 @@ async def by_city(
 async def velocity(
     from_: date | None = Query(default=None, alias="from"),
     to: date | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[VelocityOut]:
     """Días medios en cada etapa. Responde "¿dónde se atascan?" con datos."""
     rows = await MetricsService(db).velocity(_period(from_, to))
@@ -211,7 +211,7 @@ async def timeseries(
     granularity: Literal["day", "week", "month"] = "day",
     from_: date | None = Query(default=None, alias="from"),
     to: date | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[TimeseriesPointOut]:
     rows: list[dict[str, Any]] = await MetricsService(db).timeseries(
         _period(from_, to), metric=metric, granularity=granularity
@@ -224,13 +224,13 @@ async def leads_timeseries(
     granularity: Literal["day", "week", "month"] = "day",
     from_: date | None = Query(default=None, alias="from"),
     to: date | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[LeadsTimeseriesPointOut]:
     rows = await MetricsService(db).leads_timeseries(_period(from_, to), granularity=granularity)
     return [LeadsTimeseriesPointOut(**row) for row in rows]
 
 
 @router.get("/attention", response_model=AttentionOut)
-async def attention(db: AsyncSession = Depends(get_db)) -> AttentionOut:
+async def attention(db: AsyncSession | None = Depends(get_db)) -> AttentionOut:
     """Lo que requiere acción hoy: sin contestar, vencido y caliente sin tocar."""
     return AttentionOut(**await MetricsService(db).needs_attention())

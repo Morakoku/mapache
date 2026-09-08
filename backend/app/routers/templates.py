@@ -27,7 +27,7 @@ router = APIRouter()
 @router.get("", response_model=list[TemplateOut])
 async def list_templates(
     category: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[TemplateOut]:
     service = TemplateService(db)
     result = await db.execute(service.build_list_query(category=category))
@@ -41,14 +41,14 @@ async def list_variables() -> list[TemplateVariableOut]:
 
 
 @router.post("", response_model=TemplateOut, status_code=status.HTTP_201_CREATED)
-async def create_template(payload: TemplateIn, db: AsyncSession = Depends(get_db)) -> TemplateOut:
+async def create_template(payload: TemplateIn, db: AsyncSession | None = Depends(get_db)) -> TemplateOut:
     template = await TemplateService(db).create(payload.model_dump())
     await db.commit()
     return TemplateOut.model_validate(template)
 
 
 @router.get("/{template_id}", response_model=TemplateOut)
-async def get_template(template_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> TemplateOut:
+async def get_template(template_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> TemplateOut:
     return TemplateOut.model_validate(await TemplateService(db).get_or_404(template_id))
 
 
@@ -56,7 +56,7 @@ async def get_template(template_id: uuid.UUID, db: AsyncSession = Depends(get_db
 async def update_template(
     template_id: uuid.UUID,
     payload: TemplateUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> TemplateOut:
     template = await TemplateService(db).update(template_id, payload.model_dump(exclude_unset=True))
     await db.commit()
@@ -67,7 +67,7 @@ async def update_template(
 
 
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_template(template_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_template(template_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> None:
     await TemplateService(db).delete(template_id)
     await db.commit()
 
@@ -76,7 +76,7 @@ async def delete_template(template_id: uuid.UUID, db: AsyncSession = Depends(get
 async def preview_template(
     template_id: uuid.UUID,
     payload: PreviewIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> DraftOut:
     """Renderiza la plantilla con los datos reales de un prospecto.
 

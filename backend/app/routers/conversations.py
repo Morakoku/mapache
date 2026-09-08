@@ -35,7 +35,7 @@ async def list_conversations(
     q: str | None = None,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[ConversationOut]:
     service = ConversationService(db)
     stmt = service.build_list_query(filter_=filter_, channel=channel, q=q)
@@ -78,7 +78,7 @@ def _intent_of(conversation: Conversation) -> IntentOut | None:
 @router.get("/{conversation_id}", response_model=ConversationDetailOut)
 async def get_conversation(
     conversation_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ConversationDetailOut:
     conversation = await ConversationService(db).get_or_404(conversation_id)
     detail = ConversationDetailOut.model_validate(_to_out(conversation).model_dump())
@@ -91,7 +91,7 @@ async def get_conversation(
 async def set_intent(
     conversation_id: uuid.UUID,
     payload: IntentIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> IntentOut:
     """Corrige la intención detectada.
 
@@ -133,7 +133,7 @@ async def set_intent(
 async def reply(
     conversation_id: uuid.UUID,
     payload: ReplyIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ConversationMessageOut:
     """Responde por el canal del hilo.
 
@@ -153,7 +153,7 @@ async def reply(
 @router.post("/{conversation_id}/read", response_model=ConversationOut)
 async def mark_read(
     conversation_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ConversationOut:
     service = ConversationService(db)
     conversation = await service.mark_read(await service.get_or_404(conversation_id))
@@ -164,7 +164,7 @@ async def mark_read(
 @router.post("/{conversation_id}/close", response_model=ConversationOut)
 async def close(
     conversation_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ConversationOut:
     service = ConversationService(db)
     conversation = await service.close(await service.get_or_404(conversation_id))

@@ -53,7 +53,7 @@ async def list_leads(
     followup_before: datetime | None = None,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[LeadOut]:
     service = LeadService(db)
     stmt = service.build_list_query(
@@ -73,7 +73,7 @@ async def list_leads(
 @router.get("/segments/summary", response_model=SegmentSummaryOut)
 async def segment_summary(
     service_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> SegmentSummaryOut:
     """Cuántos prospectos hay en cada segmento de seguimiento."""
     service = LeadService(db)
@@ -92,7 +92,7 @@ async def list_segment(
     service_id: uuid.UUID | None = None,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[LeadEngagementOut]:
     """Prospectos por lo que hicieron con el correo.
 
@@ -150,7 +150,7 @@ def _note(row: Any, days_since_open: int | None) -> str:
 
 
 @router.post("", response_model=LeadDetailOut, status_code=status.HTTP_201_CREATED)
-async def create_lead(payload: LeadIn, db: AsyncSession = Depends(get_db)) -> LeadDetailOut:
+async def create_lead(payload: LeadIn, db: AsyncSession | None = Depends(get_db)) -> LeadDetailOut:
     lead = await LeadService(db).create(**payload.model_dump())
     # Se puntúa al crear, no en un job: un prospecto recién dado de alta con
     # score 0 se lee como "malo" cuando en realidad es "sin calcular".
@@ -162,7 +162,7 @@ async def create_lead(payload: LeadIn, db: AsyncSession = Depends(get_db)) -> Le
 @router.post("/bulk", response_model=LeadBulkResultOut, status_code=status.HTTP_201_CREATED)
 async def create_leads_bulk(
     payload: LeadBulkIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> LeadBulkResultOut:
     """Alta en lote desde una selección de empresas.
 
@@ -183,7 +183,7 @@ async def create_leads_bulk(
 
 
 @router.get("/{lead_id}", response_model=LeadDetailOut)
-async def get_lead(lead_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> LeadDetailOut:
+async def get_lead(lead_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> LeadDetailOut:
     return LeadDetailOut.model_validate(await LeadService(db).get_or_404(lead_id))
 
 
@@ -191,7 +191,7 @@ async def get_lead(lead_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Le
 async def update_lead(
     lead_id: uuid.UUID,
     payload: LeadUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> LeadDetailOut:
     service = LeadService(db)
     lead = await service.get_or_404(lead_id)
@@ -202,7 +202,7 @@ async def update_lead(
 
 
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_lead(lead_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_lead(lead_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> None:
     service = LeadService(db)
     await service.repo.delete(await service.get_or_404(lead_id))
     await db.commit()
@@ -212,7 +212,7 @@ async def delete_lead(lead_id: uuid.UUID, db: AsyncSession = Depends(get_db)) ->
 async def move_stage(
     lead_id: uuid.UUID,
     payload: LeadStageIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> LeadDetailOut:
     """Mueve un prospecto de etapa (drag & drop del Kanban).
 
@@ -228,7 +228,7 @@ async def move_stage(
 @router.post("/bulk-stage", response_model=dict)
 async def move_stage_bulk(
     payload: LeadBulkStageIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> dict[str, int]:
     service = LeadService(db)
     moved = 0
@@ -243,7 +243,7 @@ async def move_stage_bulk(
 
 
 @router.post("/{lead_id}/score", response_model=LeadDetailOut)
-async def rescore_lead(lead_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> LeadDetailOut:
+async def rescore_lead(lead_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> LeadDetailOut:
     """Recalcula el score de un prospecto ahora mismo.
 
     Uno solo es barato, así que va en línea: el usuario que pulsa "recalcular"
@@ -259,7 +259,7 @@ async def rescore_lead(lead_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -
 @router.post("/score", response_model=JobAcceptedOut, status_code=status.HTTP_202_ACCEPTED)
 async def rescore_all(
     payload: LeadRescoreIn | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> JobAcceptedOut:
     """Recálculo en lote. Es lo que hay que lanzar tras cambiar los pesos."""
     lead_ids = [str(x) for x in (payload.lead_ids if payload else [])]
@@ -278,7 +278,7 @@ async def lead_timeline(
     lead_id: uuid.UUID,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[ActivityOut]:
     await LeadService(db).get_or_404(lead_id)
     activities = ActivityService(db)
@@ -290,7 +290,7 @@ async def lead_timeline(
 @router.get("/{lead_id}/history", response_model=list[StageHistoryOut])
 async def lead_stage_history(
     lead_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[StageHistoryOut]:
     """Recorrido del prospecto por el embudo.
 
@@ -309,7 +309,7 @@ async def lead_stage_history(
 async def add_note(
     lead_id: uuid.UUID,
     payload: NoteIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> ActivityOut:
     service = LeadService(db)
     lead = await service.get_or_404(lead_id)
@@ -330,7 +330,7 @@ async def add_note(
 async def win_lead(
     lead_id: uuid.UUID,
     payload: LeadWinIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> LeadDetailOut:
     service = LeadService(db)
     lead = await service.get_or_404(lead_id)
@@ -343,7 +343,7 @@ async def win_lead(
 async def lose_lead(
     lead_id: uuid.UUID,
     payload: LeadLoseIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> LeadDetailOut:
     service = LeadService(db)
     lead = await service.get_or_404(lead_id)

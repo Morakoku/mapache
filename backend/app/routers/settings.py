@@ -64,14 +64,14 @@ def _to_out(settings: AppSettings) -> SettingsOut:
 
 
 @router.get("", response_model=SettingsOut)
-async def get_settings_row(db: AsyncSession = Depends(get_db)) -> SettingsOut:
+async def get_settings_row(db: AsyncSession | None = Depends(get_db)) -> SettingsOut:
     return _to_out(await SettingsService(db).get())
 
 
 @router.patch("", response_model=SettingsOut)
 async def update_settings(
     payload: SettingsUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> SettingsOut:
     settings = await SettingsService(db).update(payload.model_dump(exclude_unset=True))
     await db.commit()
@@ -79,7 +79,7 @@ async def update_settings(
 
 
 @router.get("/ai", response_model=AIStatusOut)
-async def ai_status(db: AsyncSession = Depends(get_db)) -> AIStatusOut:
+async def ai_status(db: AsyncSession | None = Depends(get_db)) -> AIStatusOut:
     """Qué puede hacer la IA ahora mismo.
 
     Sin clave, `configured` viene en falso y la UI esconde el botón de generar
@@ -121,7 +121,7 @@ async def ai_status(db: AsyncSession = Depends(get_db)) -> AIStatusOut:
 
 
 @router.put("/ai", response_model=AIStatusOut)
-async def set_ai_key(payload: AIKeyIn, db: AsyncSession = Depends(get_db)) -> AIStatusOut:
+async def set_ai_key(payload: AIKeyIn, db: AsyncSession | None = Depends(get_db)) -> AIStatusOut:
     """Guarda el proveedor, la clave y el modelo.
 
     La clave se cifra antes de tocar la base y no vuelve a salir por la API.
@@ -158,7 +158,7 @@ async def set_ai_key(payload: AIKeyIn, db: AsyncSession = Depends(get_db)) -> AI
 
 
 @router.delete("/ai", response_model=AIStatusOut)
-async def clear_ai_key(db: AsyncSession = Depends(get_db)) -> AIStatusOut:
+async def clear_ai_key(db: AsyncSession | None = Depends(get_db)) -> AIStatusOut:
     """Borra la clave guardada. El CRM sigue funcionando sin IA."""
     settings = await SettingsService(db).get()
     settings.ai_api_key_enc = None
@@ -167,7 +167,7 @@ async def clear_ai_key(db: AsyncSession = Depends(get_db)) -> AIStatusOut:
 
 
 @router.put("/serp", response_model=SettingsOut)
-async def set_serp_key(payload: SerpKeyIn, db: AsyncSession = Depends(get_db)) -> SettingsOut:
+async def set_serp_key(payload: SerpKeyIn, db: AsyncSession | None = Depends(get_db)) -> SettingsOut:
     """Guarda las credenciales del buscador web.
 
     Es lo que permite buscar empresas en Instagram y LinkedIn sin rastrear
@@ -197,7 +197,7 @@ async def set_serp_key(payload: SerpKeyIn, db: AsyncSession = Depends(get_db)) -
 
 
 @router.delete("/serp", response_model=SettingsOut)
-async def clear_serp_key(db: AsyncSession = Depends(get_db)) -> SettingsOut:
+async def clear_serp_key(db: AsyncSession | None = Depends(get_db)) -> SettingsOut:
     settings = await SettingsService(db).get()
     settings.serp_api_key_enc = None
     settings.serp_engine_id = None
@@ -223,7 +223,7 @@ async def list_oauth_providers() -> OAuthProvidersOut:
 
 
 @router.get("/email-accounts", response_model=list[EmailAccountOut])
-async def list_accounts(db: AsyncSession = Depends(get_db)) -> list[EmailAccountOut]:
+async def list_accounts(db: AsyncSession | None = Depends(get_db)) -> list[EmailAccountOut]:
     accounts = await EmailAccountService(db).list_accounts()
     return [EmailAccountOut.model_validate(a) for a in accounts]
 
@@ -235,7 +235,7 @@ async def list_accounts(db: AsyncSession = Depends(get_db)) -> list[EmailAccount
 )
 async def create_smtp_account(
     payload: SmtpAccountIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> EmailAccountOut:
     """Alta manual SMTP/IMAP.
 
@@ -251,7 +251,7 @@ async def create_smtp_account(
 async def update_account(
     account_id: uuid.UUID,
     payload: AccountUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> EmailAccountOut:
     account = await EmailAccountService(db).update(
         account_id, payload.model_dump(exclude_unset=True)
@@ -261,7 +261,7 @@ async def update_account(
 
 
 @router.delete("/email-accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def disconnect_account(account_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
+async def disconnect_account(account_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> None:
     """Desconecta la cuenta y revoca el token en el proveedor."""
     await EmailAccountService(db).disconnect(account_id)
     await db.commit()
@@ -270,7 +270,7 @@ async def disconnect_account(account_id: uuid.UUID, db: AsyncSession = Depends(g
 @router.post("/email-accounts/{account_id}/verify", response_model=EmailAccountOut)
 async def verify_account(
     account_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> EmailAccountOut:
     """Comprueba credenciales contra el proveedor y actualiza el estado."""
     service = EmailAccountService(db)
@@ -290,7 +290,7 @@ async def verify_account(
 )
 async def resync_account(
     account_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> JobAcceptedOut:
     """Fuerza la lectura del buzón.
 
@@ -310,7 +310,7 @@ async def resync_account(
 @router.post("/email-accounts/{account_id}/test", response_model=dict)
 async def send_test_email(
     account_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> dict[str, str]:
     """Envía un correo de prueba a la propia cuenta.
 

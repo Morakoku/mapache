@@ -53,7 +53,7 @@ def _client_ip(request: Request) -> str:
 async def dispatch(
     payload: HermesDispatchIn,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> JobAcceptedOut:
     """Encola un job del contrato. Devuelve 202 + job_id."""
     key = request.headers.get("idempotency-key")
@@ -122,7 +122,7 @@ async def dispatch(
 async def get_job(
     job_id: uuid.UUID,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> HermesJobOut:
     """Estado de un job del contrato. Solo jobs de la identidad autenticada."""
     job = await JobService(db).get_or_404(job_id)

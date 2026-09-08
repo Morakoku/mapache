@@ -114,6 +114,10 @@ class Settings(BaseSettings):
     microsoft_client_id: str | None = None
     microsoft_client_secret: SecretStr | None = None
 
+    # ---------------------------------------------------------------- Resend
+    # API key para envío de emails vía Resend (gratis hasta 100/día)
+    resend_api_key: SecretStr | None = None
+
     # ---------------------------------------------------------------- planificador
     # Sin esto, las secuencias existen pero nadie las dispara. Se puede apagar
     # para levantar una segunda instancia de la API sin duplicar los ticks.
@@ -243,6 +247,11 @@ class Settings(BaseSettings):
     def supabase_service_role_key_value(self) -> str | None:
         """Get the service role key as a plain string."""
         return self.supabase_service_role_key.get_secret_value() if self.supabase_service_role_key else None
+
+    @property
+    def resend_api_key_value(self) -> str | None:
+        """Get the Resend API key as a plain string."""
+        return self.resend_api_key.get_secret_value() if self.resend_api_key else None
 
     @property
     def sqlalchemy_url(self) -> str | None:

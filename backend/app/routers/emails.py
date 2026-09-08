@@ -46,7 +46,7 @@ class EmailRepository(BaseRepository[EmailMessage]):
 
 
 @router.post("/preview", response_model=list[DraftOut])
-async def preview(payload: PreviewIn, db: AsyncSession = Depends(get_db)) -> list[DraftOut]:
+async def preview(payload: PreviewIn, db: AsyncSession | None = Depends(get_db)) -> list[DraftOut]:
     """Borradores renderizados, sin enviar nada (Módulo 9).
 
     Cada borrador trae sus avisos y, si algún guardrail lo bloquearía, el
@@ -85,7 +85,7 @@ async def preview(payload: PreviewIn, db: AsyncSession = Depends(get_db)) -> lis
 @router.post("/personalize", response_model=PersonalizedDraftOut)
 async def personalize_email(
     payload: PersonalizeIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> PersonalizedDraftOut:
     """Genera un borrador con IA (Módulo 11).
 
@@ -143,7 +143,7 @@ async def personalize_email(
 
 
 @router.post("/send", response_model=JobAcceptedOut, status_code=status.HTTP_202_ACCEPTED)
-async def send(payload: SendIn, db: AsyncSession = Depends(get_db)) -> JobAcceptedOut:
+async def send(payload: SendIn, db: AsyncSession | None = Depends(get_db)) -> JobAcceptedOut:
     """Encola el lote de envío.
 
     Se valida aquí que exista una cuenta utilizable: fallar en el worker
@@ -185,7 +185,7 @@ async def list_emails(
     direction: Direction | None = None,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> Page[EmailMessageOut]:
     stmt = select(EmailMessage).order_by(EmailMessage.created_at.desc())
     if lead_id is not None:
@@ -200,7 +200,7 @@ async def list_emails(
 
 
 @router.get("/{email_id}", response_model=EmailDetailOut)
-async def get_email(email_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> EmailDetailOut:
+async def get_email(email_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> EmailDetailOut:
     email = await _get_or_404(db, email_id)
     events = await _events_of(db, email_id)
     detail = EmailDetailOut.model_validate(email)
@@ -212,7 +212,7 @@ async def get_email(email_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> 
 @router.get("/{email_id}/events", response_model=list[EmailEventOut])
 async def list_events(
     email_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> list[EmailEventOut]:
     await _get_or_404(db, email_id)
     return [EmailEventOut.model_validate(e) for e in await _events_of(db, email_id)]
@@ -221,7 +221,7 @@ async def list_events(
 @router.post("/{email_id}/cancel", response_model=EmailMessageOut)
 async def cancel_email(
     email_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> EmailMessageOut:
     """Cancela un correo aún no enviado.
 
@@ -243,7 +243,7 @@ async def cancel_email(
 @router.post("/{email_id}/resend", response_model=JobAcceptedOut, status_code=202)
 async def resend_email(
     email_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> JobAcceptedOut:
     """Reencola un correo que falló.
 

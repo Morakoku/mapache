@@ -19,6 +19,7 @@ from app.routers import (
     contacts,
     conversations,
     csv_import,
+    email_simple,
     emails,
     followups,
     guaki,
@@ -80,6 +81,7 @@ api_router.include_router(calls.scripts_router, prefix="/call-scripts", tags=["g
 api_router.include_router(calls.router, prefix="/calls", tags=["llamadas"])
 
 # Correo (Fase 4)
+api_router.include_router(email_simple.router, prefix="/email-simple", tags=["email-simple"])
 api_router.include_router(settings.router, prefix="/settings", tags=["configuración"])
 api_router.include_router(templates.router, prefix="/templates", tags=["plantillas"])
 api_router.include_router(emails.router, prefix="/emails", tags=["correos"])

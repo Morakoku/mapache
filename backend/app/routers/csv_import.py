@@ -55,7 +55,7 @@ def _dedupe_key(row: dict[str, Any]) -> str:
 @router.post("/import", summary="Import companies from CSV")
 async def import_csv(
     file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ) -> dict[str, Any]:
     """Import companies from CSV, create leads, and score them."""
     if not file.filename or not file.filename.lower().endswith(".csv"):
