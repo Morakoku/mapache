@@ -36,7 +36,6 @@ from app.routers import (
     settings,
     suppression,
     templates,
-    torre_control,
     tracking,
 )
 from app.routers.security_schemes import SERVICE_BEARER
@@ -102,6 +101,5 @@ api_router.include_router(followups.router, prefix="/follow-ups", tags=["seguimi
 public_router.include_router(tracking.router, prefix="/tracking", tags=["tracking"])
 public_router.include_router(auth.router, prefix="/auth", tags=["oauth"])
 public_router.include_router(email_simple.router, prefix="/email-simple-public", tags=["email-simple-public"])
-public_router.include_router(torre_control.router, prefix="/torre-control", tags=["torre-control"])
 
 __all__ = ["api_router", "public_router"]

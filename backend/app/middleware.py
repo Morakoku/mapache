@@ -57,8 +57,12 @@ _PUBLIC_PREFIXES = (
     "/redoc",
     "/openapi.json",
     "/torre-control",
+    "/torre-control/",
     "/tc-api",
+    "/tc-api/",
     "/email-simple-public",
+    "/dashboard",
+    "/dashboard/",
 )
 
 # Únicos endpoints `/auth/*` públicos: los que ejecutan Google/Microsoft durante
