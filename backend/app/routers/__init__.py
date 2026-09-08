@@ -28,6 +28,7 @@ from app.routers import (
     leads,
     metrics,
     pipeline,
+    scraping,
     searches,
     sequences,
     services,
@@ -57,6 +58,7 @@ public_router.include_router(health.router)
 # Prospección (Fase 2)
 api_router.include_router(services.router, prefix="/services", tags=["servicios"])
 api_router.include_router(searches.router, prefix="/searches", tags=["búsquedas"])
+api_router.include_router(scraping.router, prefix="/scraping", tags=["scraping"])
 api_router.include_router(companies.router, prefix="/companies", tags=["empresas"])
 api_router.include_router(csv_import.router)
 api_router.include_router(contact_queue.router)
