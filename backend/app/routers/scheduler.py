@@ -33,7 +33,7 @@ async def scheduler_trigger(action: str = "ping") -> dict[str, Any]:
       la cola inprocess ya los está procesando)
     """
     settings = get_settings()
-    logger.info("scheduler_trigger", action=action, environment=settings.environment)
+    logger.info("scheduler_trigger action=%s env=%s", action, settings.environment)
 
     if action == "ping":
         return {"status": "ok", "message": "Mapache scheduler alive"}
