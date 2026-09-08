@@ -65,6 +65,7 @@ _PUBLIC_PREFIXES = (
     "/dashboard/",
     "/api/v1/tc",
     "/api/v1/control",
+    "/scheduler",
 )
 
 # Únicos endpoints `/auth/*` públicos: los que ejecutan Google/Microsoft durante

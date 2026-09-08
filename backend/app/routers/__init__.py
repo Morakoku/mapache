@@ -104,5 +104,6 @@ public_router.include_router(tracking.router, prefix="/tracking", tags=["trackin
 public_router.include_router(auth.router, prefix="/auth", tags=["oauth"])
 public_router.include_router(email_simple.router, prefix="/email-simple-public", tags=["email-simple-public"])
 public_router.include_router(public_dashboard.router, prefix="/api/v1/control", tags=["public-dashboard"])
+public_router.include_router(scheduler.router, prefix="/scheduler", tags=["scheduler"])
 
 __all__ = ["api_router", "public_router"]
