@@ -63,6 +63,7 @@ _PUBLIC_PREFIXES = (
     "/email-simple-public",
     "/dashboard",
     "/dashboard/",
+    "/api/v1/tc",
 )
 
 # Únicos endpoints `/auth/*` públicos: los que ejecutan Google/Microsoft durante
