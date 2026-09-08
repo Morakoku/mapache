@@ -2,24 +2,20 @@
 
 Dashboard en tiempo real con:
 - Estado de todos los servicios
-- Controles de encendido/apagado
+- Controles de encendido/apagado (vía HTTP, no subprocess)
 - Métricas de DB, emails, scraping
 - Logs en vivo
 """
 
 from __future__ import annotations
 
-import asyncio
-import csv
 import os
-import subprocess
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
 from app.core.config import get_settings
@@ -28,14 +24,6 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["torre-control"])
-
-# Estado en memoria del dashboard
-_dashboard_state: dict[str, Any] = {
-    "scraper_running": False,
-    "scraper_pid": None,
-    "last_checks": {},
-}
-
 
 # ---------------------------------------------------------------- HTML dashboard
 
@@ -74,11 +62,7 @@ body {
   border-bottom: 1px solid var(--border);
   margin-bottom: 30px;
 }
-.header h1 {
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-}
+.header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
 .header .logo { color: var(--accent); }
 .header .status { display: flex; gap: 15px; align-items: center; }
 .pill {
@@ -113,7 +97,6 @@ body {
   margin-bottom: 16px;
 }
 .card-title { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
-.card-icon { font-size: 24px; }
 .card-value { font-size: 36px; font-weight: 700; margin-bottom: 8px; }
 .card-sub { font-size: 13px; color: var(--muted); }
 
@@ -132,7 +115,6 @@ body {
 .btn-off:hover { background: #ff5252; }
 .btn-blue { background: var(--blue); color: #fff; }
 .btn-blue:hover { background: #448aff; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .logs {
   background: #000;
@@ -169,30 +151,6 @@ body {
 }
 .refresh-btn:hover { border-color: var(--accent); }
 
-.progress-bar {
-  height: 4px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-top: 8px;
-}
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 2px;
-  transition: width 0.3s;
-}
-
-.table { width: 100%; border-collapse: collapse; }
-.table th, .table td {
-  padding: 12px;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-  font-size: 13px;
-}
-.table th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
-.table tr:hover td { background: rgba(255,255,255,0.02); }
-
 @media (max-width: 768px) {
   .grid { grid-template-columns: 1fr; }
   .header { flex-direction: column; gap: 15px; }
@@ -217,9 +175,7 @@ body {
   <div style="color: var(--muted); font-size: 12px;">Actualización cada 10s</div>
 </div>
 
-<div class="grid" id="services-grid">
-  <!-- Cards se cargan dinámicamente -->
-</div>
+<div class="grid" id="services-grid"></div>
 
 <div class="card" style="margin-bottom: 30px;">
   <div class="card-header">
@@ -244,7 +200,7 @@ body {
 </div>
 
 <script>
-const API = '/api/v1/torre-control';
+const API = '/torre-control';
 let autoInterval = null;
 let logs = [];
 
@@ -293,7 +249,6 @@ function renderServices(data) {
     const pillClass = status === 'ok' ? 'on' : status === 'error' ? 'off' : 'warn';
     const pillText = status === 'ok' ? 'Operativo' : status === 'error' ? 'Error' : 'Verificando';
     const canToggle = s.key === 'scraper';
-    const btnOn = st.status === 'ok' ? '' : '';
     return `
       <div class="card">
         <div class="card-header">
@@ -382,15 +337,9 @@ async def dashboard() -> str:
 
 
 @router.get("/status")
-async def torre_status_public() -> dict[str, Any]:
+async def torre_status() -> dict[str, Any]:
     """Estado de todos los servicios (público para el dashboard)."""
-    return await torre_status()
-
-
-@router.get("/metrics")
-async def torre_metrics_public() -> dict[str, Any]:
-    """Métricas de la base de datos (público para el dashboard)."""
-    return await torre_metrics()
+    results: dict[str, Any] = {"services": {}, "timestamp": datetime.now(UTC).isoformat()}
     
     # 1) Base de datos (PostgREST)
     t0 = time.time()
@@ -460,14 +409,24 @@ async def torre_metrics_public() -> dict[str, Any]:
             "detail": str(e)[:100],
         }
     
-    # 3) Scraper
-    scraper_running = _dashboard_state.get("scraper_running", False)
-    scraper_path = os.environ.get("SCRAPER_PATH", r"C:\Users\edwin\Documents\Trinidad\google-maps-scraper.exe")
-    results["services"]["scraper"] = {
-        "status": "ok" if scraper_running else "warn",
-        "message": "Corriendo" if scraper_running else "Detenido",
-        "detail": f"PID: {_dashboard_state.get('scraper_pid')}" if scraper_running else "Listo para iniciar",
-    }
+    # 3) Scraper (verifica vía HTTP si está corriendo)
+    t0 = time.time()
+    try:
+        scraper_url = os.environ.get("SCRAPER_URL", "http://localhost:8080")
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"{scraper_url}/health")
+            latency = int((time.time() - t0) * 1000)
+            results["services"]["scraper"] = {
+                "status": "ok" if resp.status_code == 200 else "error",
+                "latency": latency,
+                "message": "Corriendo" if resp.status_code == 200 else f"HTTP {resp.status_code}",
+            }
+    except Exception:
+        results["services"]["scraper"] = {
+            "status": "warn",
+            "message": "Detenido",
+            "detail": "No responde en " + os.environ.get("SCRAPER_URL", "http://localhost:8080"),
+        }
     
     # 4) API Mapache
     t0 = time.time()
@@ -492,9 +451,9 @@ async def torre_metrics_public() -> dict[str, Any]:
     return results
 
 
-@router.get("/api/v1/torre-control/metrics")
+@router.get("/metrics")
 async def torre_metrics() -> dict[str, Any]:
-    """Métricas de la base de datos."""
+    """Métricas de la base de datos (público para el dashboard)."""
     metrics = {"companies": 0, "contacts": 0, "emails_sent": 0, "active_jobs": 0}
     
     try:
@@ -510,47 +469,41 @@ async def torre_metrics() -> dict[str, Any]:
     return metrics
 
 
-@router.post("/api/v1/torre-control/services/scraper/{action}")
+@router.post("/services/scraper/{action}")
 async def control_scraper(action: str) -> dict[str, Any]:
-    """Controla el servicio de scraping."""
+    """Controla el servicio de scraping vía HTTP.
+    
+    En Vercel serverless no se pueden usar subprocess. En su lugar,
+    enviamos un request HTTP al scraper para iniciarlo o detenerlo.
+    El scraper debe estar corriendo en una máquina local o VPS.
+    """
     if action not in ("start", "stop"):
-        raise HTTPException(status_code=400, detail="Acción inválida")
+        raise HTTPException(status_code=400, detail="Acción inválida: use 'start' o 'stop'")
     
-    scraper_path = os.environ.get("SCRAPER_PATH", r"C:\Users\edwin\Documents\Trinidad\google-maps-scraper.exe")
-    scraper_port = os.environ.get("SCRAPER_PORT", "8080")
+    scraper_url = os.environ.get("SCRAPER_URL", "http://localhost:8080")
     
-    if action == "start":
-        if _dashboard_state["scraper_running"]:
-            return {"success": True, "message": "Scraper ya estaba corriendo"}
-        
-        try:
-            proc = subprocess.Popen(
-                [scraper_path, "-web", "-addr", f":{scraper_port}"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            _dashboard_state["scraper_running"] = True
-            _dashboard_state["scraper_pid"] = proc.pid
-            return {"success": True, "message": f"Scraper iniciado (PID: {proc.pid})"}
-        except Exception as e:
-            return {"success": False, "message": f"Error iniciando: {e}"}
-    
-    else:  # stop
-        if not _dashboard_state["scraper_running"]:
-            return {"success": True, "message": "Scraper ya estaba detenido"}
-        
-        try:
-            if _dashboard_state["scraper_pid"]:
-                subprocess.run(["taskkill", "/PID", str(_dashboard_state["scraper_pid"]), "/F"], 
-                             capture_output=True)
-            _dashboard_state["scraper_running"] = False
-            _dashboard_state["scraper_pid"] = None
-            return {"success": True, "message": "Scraper detenido"}
-        except Exception as e:
-            return {"success": False, "message": f"Error deteniendo: {e}"}
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            if action == "start":
+                resp = await client.post(f"{scraper_url}/start")
+                return {
+                    "success": resp.status_code == 200,
+                    "message": f"Señal de inicio enviada al scraper" if resp.status_code == 200 else f"Error: HTTP {resp.status_code}",
+                }
+            else:
+                resp = await client.post(f"{scraper_url}/stop")
+                return {
+                    "success": resp.status_code == 200,
+                    "message": f"Señal de detención enviada al scraper" if resp.status_code == 200 else f"Error: HTTP {resp.status_code}",
+                }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"No se conectar al scraper en {scraper_url}: {e}",
+        }
 
 
-@router.post("/api/v1/torre-control/services/database/test")
+@router.post("/services/database/test")
 async def test_database() -> dict[str, Any]:
     """Prueba la conexión a la base de datos."""
     try:
@@ -561,7 +514,7 @@ async def test_database() -> dict[str, Any]:
         return {"success": False, "message": str(e)}
 
 
-@router.post("/api/v1/torre-control/services/email/test")
+@router.post("/services/email/test")
 async def test_email() -> dict[str, Any]:
     """Prueba el envío de email."""
     settings = get_settings()
