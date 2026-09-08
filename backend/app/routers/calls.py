@@ -8,14 +8,15 @@ falta. Todo lo demás es CRUD de guiones e histórico.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.enums import CallOutcome, CallScriptType
-from app.core.exceptions import ConflictError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.models.call import CallLog
 from app.schemas.call import (
     CallBriefOut,
@@ -35,6 +36,16 @@ from app.services.sequence_svc import FollowUpService, next_valid_slot
 router = APIRouter()
 scripts_router = APIRouter()
 
+# ------------------------------------------------------------------ helpers
+
+
+def _pg_table_scripts() -> str:
+    return "call_scripts"
+
+
+def _pg_table_logs() -> str:
+    return "call_logs"
+
 
 # ------------------------------------------------------------------ guiones
 
@@ -46,6 +57,22 @@ async def list_scripts(
     include_inactive: bool = False,
     db: AsyncSession | None = Depends(get_db),
 ) -> list[CallScriptOut]:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        filters: dict[str, str] = {}
+        if script_type is not None:
+            filters["script_type"] = script_type.value
+        if service_id is not None:
+            filters["service_id"] = str(service_id)
+        if not include_inactive:
+            filters["is_active"] = "true"
+        items = await pg_select(_pg_table_scripts(), filters=filters if filters else None, limit=200)
+        return [CallScriptOut.model_validate(s) for s in items]
+
     service = CallService(db)
     stmt = service.build_script_query(
         script_type=script_type, service_id=service_id, only_active=not include_inactive
@@ -55,7 +82,22 @@ async def list_scripts(
 
 
 @scripts_router.post("", response_model=CallScriptOut, status_code=status.HTTP_201_CREATED)
-async def create_script(payload: CallScriptIn, db: AsyncSession | None = Depends(get_db)) -> CallScriptOut:
+async def create_script(
+    payload: CallScriptIn, db: AsyncSession | None = Depends(get_db)
+) -> CallScriptOut:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import insert as pg_insert
+
+        data = dict(payload.model_dump())
+        data["id"] = data.get("id") or str(uuid.uuid4())
+        result = await pg_insert(_pg_table_scripts(), data)
+        if not result:
+            raise HTTPException(status_code=500, detail="No se pudo crear el guión")
+        return CallScriptOut.model_validate(result[0])
+
     data = payload.model_dump()
     script = await CallService(db).create_script(data)
     await db.commit()
@@ -65,6 +107,17 @@ async def create_script(payload: CallScriptIn, db: AsyncSession | None = Depends
 
 @scripts_router.get("/{script_id}", response_model=CallScriptOut)
 async def get_script(script_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> CallScriptOut:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        items = await pg_select(_pg_table_scripts(), filters={"id": str(script_id)}, limit=1)
+        if not items:
+            raise NotFoundError.for_entity("call_script", script_id)
+        return CallScriptOut.model_validate(items[0])
+
     return CallScriptOut.model_validate(await CallService(db).get_script_or_404(script_id))
 
 
@@ -74,19 +127,52 @@ async def update_script(
     payload: CallScriptUpdate,
     db: AsyncSession | None = Depends(get_db),
 ) -> CallScriptOut:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+        from app.core.supabase_http import update as pg_update
+
+        existing = await pg_select(_pg_table_scripts(), filters={"id": str(script_id)}, limit=1)
+        if not existing:
+            raise NotFoundError.for_entity("call_script", script_id)
+
+        data = payload.model_dump(exclude_unset=True)
+        result = await pg_update(_pg_table_scripts(), {"id": str(script_id)}, data)
+        if not result:
+            raise NotFoundError.for_entity("call_script", script_id)
+        return CallScriptOut.model_validate(result[0])
+
     service = CallService(db)
     script = await service.get_script_or_404(script_id)
     data = payload.model_dump(exclude_unset=True)
     await service.update_script(script, data)
     await db.commit()
-    # `updated_at` lo pone la base al hacer UPDATE: sin refrescar, serializarlo
-    # dispara una carga perezosa fuera del greenlet y revienta.
     await db.refresh(script)
     return CallScriptOut.model_validate(script)
 
 
 @scripts_router.delete("/{script_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_script(script_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> None:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import delete as pg_delete
+        from app.core.supabase_http import select as pg_select
+
+        items = await pg_select(_pg_table_scripts(), filters={"id": str(script_id)}, limit=1)
+        if not items:
+            raise NotFoundError.for_entity("call_script", script_id)
+        if items[0].get("is_system"):
+            raise ConflictError(
+                "Los guiones que trae el CRM no se borran. Puedes desactivarlos o editarlos.",
+                code="CALL_SCRIPT_IS_SYSTEM",
+            )
+        await pg_delete(_pg_table_scripts(), {"id": str(script_id)})
+        return
+
     service = CallService(db)
     script = await service.get_script_or_404(script_id)
     if script.is_system:
@@ -113,6 +199,30 @@ async def call_brief(
     Sin `script_type` elige la situación por el estado del prospecto y explica
     por qué. La interfaz deja cambiarla: quien llama sabe cosas que el CRM no.
     """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        lead_items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+        if not lead_items:
+            raise NotFoundError.for_entity("lead", lead_id)
+        lead = lead_items[0]
+
+        # Construir un brief mínimo desde los datos del lead
+        return CallBriefOut(
+            lead_id=lead_id,
+            lead_name=lead.get("display_name", ""),
+            company_name=lead.get("company_name", ""),
+            phone=lead.get("phone"),
+            email=lead.get("email"),
+            stage=lead.get("stage_name", ""),
+            script_suggestion=None,
+            warnings=[],
+            can_call=True,
+        )
+
     lead = await LeadService(db).get_or_404(lead_id)
     brief = await CallService(db).build_brief(lead, script_type=script_type, script_id=script_id)
     return CallBriefOut(**asdict(brief), can_call=brief.can_call)
@@ -130,6 +240,83 @@ async def log_call(
     misma petición: al colgar es cuando se sabe, y obligar a tres pantallas
     distintas garantiza que no se haga.
     """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import insert as pg_insert
+        from app.core.supabase_http import select as pg_select
+        from app.core.supabase_http import update as pg_update
+
+        lead_items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+        if not lead_items:
+            raise NotFoundError.for_entity("lead", lead_id)
+        lead = lead_items[0]
+
+        now_iso = datetime.now(UTC).isoformat()
+        call_id = str(uuid.uuid4())
+
+        call_data: dict[str, Any] = {
+            "id": call_id,
+            "lead_id": str(lead_id),
+            "outcome": payload.outcome.value,
+            "script_id": str(payload.script_id) if payload.script_id else None,
+            "phone": payload.phone,
+            "duration_seconds": payload.duration_seconds,
+            "notes": payload.notes,
+            "occurred_at": payload.occurred_at.isoformat() if payload.occurred_at else now_iso,
+            "created_at": now_iso,
+        }
+        result = await pg_insert(_pg_table_logs(), call_data)
+        if not result:
+            raise HTTPException(status_code=500, detail="No se pudo registrar la llamada")
+        call = result[0]
+
+        stage_moved = False
+        if payload.apply_suggested_stage:
+            # Si hay stage_id en el payload, mover el lead
+            if payload.suggested_stage_id:
+                await pg_update("leads", {"id": str(lead_id)}, {"stage_id": str(payload.suggested_stage_id)})
+                stage_moved = True
+
+        follow_up_created = False
+        if payload.follow_up_at is not None:
+            # Intentar obtener settings para next_valid_slot; si no, usar la hora dada
+            try:
+                settings_row = await pg_select("app_settings", limit=1)
+                settings_data = settings_row[0] if settings_row else {}
+            except Exception:
+                settings_data = {}
+
+            cuando = payload.follow_up_at.isoformat()
+            if settings_data:
+                try:
+                    when = next_valid_slot(payload.follow_up_at, settings=settings_data)
+                    cuando = when.isoformat()
+                except Exception:
+                    cuando = payload.follow_up_at.isoformat()
+
+            await pg_insert(
+                "follow_ups",
+                {
+                    "id": str(uuid.uuid4()),
+                    "lead_id": str(lead_id),
+                    "scheduled_at": cuando,
+                    "note": f"Volver a llamar. {payload.notes or ''}".strip(),
+                    "created_at": now_iso,
+                },
+            )
+            follow_up_created = True
+
+        contact_blocked = payload.outcome == CallOutcome.DO_NOT_CALL and lead.get("contact_id")
+
+        return CallLogResultOut(
+            call=_to_out(call),
+            stage_moved=stage_moved,
+            follow_up_created=follow_up_created,
+            contact_blocked=contact_blocked,
+        )
+
     leads = LeadService(db)
     lead = await leads.get_or_404(lead_id)
     service = CallService(db)
@@ -151,9 +338,6 @@ async def log_call(
 
     follow_up_created = False
     if payload.follow_up_at is not None:
-        # "Recuérdame en dos días" caería a la hora exacta de la llamada, que
-        # de madrugada no sirve de nada. Se empuja al primer hueco del horario
-        # de contacto, nunca hacia atrás.
         settings = await EmailService(db).get_settings_row()
         cuando = next_valid_slot(payload.follow_up_at, settings=settings)
         await FollowUpService(db).create_manual(
@@ -184,6 +368,21 @@ async def list_calls(
     size: int = Query(default=50, ge=1, le=200),
     db: AsyncSession | None = Depends(get_db),
 ) -> Page[CallLogOut]:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        filters: dict[str, str] = {}
+        if lead_id is not None:
+            filters["lead_id"] = str(lead_id)
+        if outcome is not None:
+            filters["outcome"] = outcome.value
+        items = await pg_select(_pg_table_logs(), filters=filters if filters else None, limit=size)
+        total = len(items)
+        return Page.build([_to_out(c) for c in items], total, page, size)
+
     service = CallService(db)
     stmt = service.build_log_query(lead_id=lead_id, outcome=outcome)
     items, total = await CallLogRepository(db).paginate(stmt, page=page, size=size)

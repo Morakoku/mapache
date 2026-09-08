@@ -39,15 +39,9 @@ async def scheduler_trigger(action: str = "ping") -> dict[str, Any]:
         return {"status": "ok", "message": "Mapache scheduler alive"}
 
     if action == "scrape":
-        async with settings.db_session() as session:
-            # Create a SCRAPER_HEALTH job
-            job = await JobService(session).create(
-                "SCRAPER_HEALTH",
-                {"source": "scheduler_trigger", "action": "health_check"}
-            )
-            await session.commit()
-            logger.info("scraper_health_job_created", job_id=str(job.id))
-        return {"status": "ok", "message": "Scraper health job enqueued", "job_id": str(job.id)}
+        # En serverless (db=None) no se puede crear job vía SQLAlchemy.
+        # El scraper se controla vía SCRAPER_URL (HTTP) desde el dashboard.
+        return {"status": "ok", "message": "Scraper control via SCRAPER_URL (use dashboard)"}
 
     if action == "process":
         # In the current implementation, jobs are processed automatically
