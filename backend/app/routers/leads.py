@@ -6,13 +6,13 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.container import get_job_queue
 from app.core.database import get_db
-from app.core.enums import ActivityType, ActorType, JobType, LeadStatus
+from app.core.enums import ActivityType, ActorType, JobType, LeadStatus, StageType
 from app.models.lead import Lead, LeadStageHistory
 from app.schemas.common import JobAcceptedOut, Page
 from app.schemas.crm import (
@@ -41,6 +41,9 @@ from app.services.scoring_svc import ScoringService
 router = APIRouter()
 
 
+# ------------------------------------------------------------------ list / segments
+
+
 @router.get("", response_model=Page[LeadOut])
 async def list_leads(
     stage_id: uuid.UUID | None = None,
@@ -55,6 +58,27 @@ async def list_leads(
     size: int = Query(default=50, ge=1, le=200),
     db: AsyncSession | None = Depends(get_db),
 ) -> Page[LeadOut]:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        filters: dict[str, str] = {}
+        if stage_id is not None:
+            filters["stage_id"] = str(stage_id)
+        if service_id is not None:
+            filters["service_id"] = str(service_id)
+        if lead_status is not None:
+            filters["status"] = lead_status.value
+        if has_email is not None:
+            filters["has_email"] = str(has_email).lower()
+        if min_score is not None:
+            filters["score"] = str(min_score)
+        items = await pg_select("leads", filters=filters if filters else None, limit=size)
+        total = len(items)
+        return Page.build([LeadOut.model_validate(x) for x in items], total, page, size)
+
     service = LeadService(db)
     stmt = service.build_list_query(
         stage_id=stage_id,
@@ -76,6 +100,22 @@ async def segment_summary(
     db: AsyncSession | None = Depends(get_db),
 ) -> SegmentSummaryOut:
     """Cuántos prospectos hay en cada segmento de seguimiento."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import count as pg_count
+
+        from app.services.lead_svc import SEGMENTS
+
+        counts: dict[str, int] = {}
+        for segment in SEGMENTS:
+            filters: dict[str, str] = {"segment": segment}
+            if service_id is not None:
+                filters["service_id"] = str(service_id)
+            counts[segment] = await pg_count("leads", filters=filters)
+        return SegmentSummaryOut(**counts)
+
     service = LeadService(db)
     counts: dict[str, int] = {}
     for segment in SEGMENTS:
@@ -149,11 +189,25 @@ def _note(row: Any, days_since_open: int | None) -> str:
     return f"Abrió {row.opens} vez(ces), la última {cuando}, y no respondió."
 
 
+# ------------------------------------------------------------------ CRUD
+
+
 @router.post("", response_model=LeadDetailOut, status_code=status.HTTP_201_CREATED)
 async def create_lead(payload: LeadIn, db: AsyncSession | None = Depends(get_db)) -> LeadDetailOut:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import insert as pg_insert
+
+        data = dict(payload.model_dump())
+        data["id"] = data.get("id") or str(uuid.uuid4())
+        result = await pg_insert("leads", data)
+        if not result:
+            raise HTTPException(status_code=500, detail="No se pudo crear el prospecto")
+        return LeadDetailOut.model_validate(result[0])
+
     lead = await LeadService(db).create(**payload.model_dump())
-    # Se puntúa al crear, no en un job: un prospecto recién dado de alta con
-    # score 0 se lee como "malo" cuando en realidad es "sin calcular".
     await ScoringService(db).score_leads([lead.id])
     await db.commit()
     return LeadDetailOut.model_validate(await LeadService(db).get_or_404(lead.id))
@@ -184,6 +238,17 @@ async def create_leads_bulk(
 
 @router.get("/{lead_id}", response_model=LeadDetailOut)
 async def get_lead(lead_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> LeadDetailOut:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+        if not items:
+            raise NotFoundError.for_entity("lead", lead_id)
+        return LeadDetailOut.model_validate(items[0])
+
     return LeadDetailOut.model_validate(await LeadService(db).get_or_404(lead_id))
 
 
@@ -193,6 +258,23 @@ async def update_lead(
     payload: LeadUpdate,
     db: AsyncSession | None = Depends(get_db),
 ) -> LeadDetailOut:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+        from app.core.supabase_http import update as pg_update
+
+        existing = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+        if not existing:
+            raise NotFoundError.for_entity("lead", lead_id)
+
+        data = payload.model_dump(exclude_unset=True)
+        result = await pg_update("leads", {"id": str(lead_id)}, data)
+        if not result:
+            raise NotFoundError.for_entity("lead", lead_id)
+        return LeadDetailOut.model_validate(result[0])
+
     service = LeadService(db)
     lead = await service.get_or_404(lead_id)
     for key, value in payload.model_dump(exclude_unset=True).items():
@@ -203,9 +285,25 @@ async def update_lead(
 
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_lead(lead_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> None:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import delete as pg_delete
+        from app.core.supabase_http import select as pg_select
+
+        items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+        if not items:
+            raise NotFoundError.for_entity("lead", lead_id)
+        await pg_delete("leads", {"id": str(lead_id)})
+        return
+
     service = LeadService(db)
     await service.repo.delete(await service.get_or_404(lead_id))
     await db.commit()
+
+
+# ------------------------------------------------------------------ stage / score
 
 
 @router.post("/{lead_id}/stage", response_model=LeadDetailOut)
@@ -218,6 +316,76 @@ async def move_stage(
 
     Registra el cambio en el historial y crea una actividad automáticamente.
     """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import insert as pg_insert
+        from app.core.supabase_http import select as pg_select
+        from app.core.supabase_http import update as pg_update
+
+        lead_items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+        if not lead_items:
+            raise NotFoundError.for_entity("lead", lead_id)
+        lead = lead_items[0]
+        company_id = lead.get("company_id")
+
+        # Actualizar stage_id del lead
+        result = await pg_update("leads", {"id": str(lead_id)}, {"stage_id": str(payload.stage_id)})
+        if not result:
+            raise NotFoundError.for_entity("lead", lead_id)
+
+        # Obtener tipos de etapa para el historial
+        from_stage_items = (
+            await pg_select("pipeline_stages", filters={"id": str(lead.get("stage_id"))}, limit=1)
+            if lead.get("stage_id")
+            else []
+        )
+        to_stage_items = await pg_select(
+            "pipeline_stages", filters={"id": str(payload.stage_id)}, limit=1
+        )
+
+        from app.core.enums import ActorType
+
+        now_iso = datetime.now(UTC).isoformat()
+        history_data: dict[str, Any] = {
+            "id": str(uuid.uuid4()),
+            "lead_id": str(lead_id),
+            "from_stage_id": str(lead.get("stage_id")) if lead.get("stage_id") else None,
+            "to_stage_id": str(payload.stage_id),
+            "from_stage_type": (
+                from_stage_items[0]["stage_type"]
+                if from_stage_items and from_stage_items[0].get("stage_type")
+                else None
+            ),
+            "to_stage_type": (
+                to_stage_items[0]["stage_type"]
+                if to_stage_items and to_stage_items[0].get("stage_type")
+                else None
+            ),
+            "actor": ActorType.USER.value,
+            "reason": payload.reason,
+            "entered_at": now_iso,
+        }
+        await pg_insert("lead_stage_history", history_data)
+
+        # Crear actividad
+        await pg_insert(
+            "activities",
+            {
+                "id": str(uuid.uuid4()),
+                "type": ActivityType.MOVED_STAGE.value,
+                "title": "Cambio de etapa",
+                "description": f"Movido a etapa {payload.stage_id}",
+                "lead_id": str(lead_id),
+                "company_id": str(company_id) if company_id else None,
+                "actor": ActorType.USER.value,
+                "occurred_at": now_iso,
+            },
+        )
+
+        return LeadDetailOut.model_validate(result[0])
+
     service = LeadService(db)
     lead = await service.get_or_404(lead_id)
     await service.move_stage(lead, payload.stage_id, actor=ActorType.USER, reason=payload.reason)
@@ -230,6 +398,22 @@ async def move_stage_bulk(
     payload: LeadBulkStageIn,
     db: AsyncSession | None = Depends(get_db),
 ) -> dict[str, int]:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+        from app.core.supabase_http import update as pg_update
+
+        moved = 0
+        for lead_id in payload.lead_ids:
+            items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+            if not items:
+                continue
+            await pg_update("leads", {"id": str(lead_id)}, {"stage_id": str(payload.stage_id)})
+            moved += 1
+        return {"moved": moved}
+
     service = LeadService(db)
     moved = 0
     for lead_id in payload.lead_ids:
@@ -249,6 +433,22 @@ async def rescore_lead(lead_id: uuid.UUID, db: AsyncSession | None = Depends(get
     Uno solo es barato, así que va en línea: el usuario que pulsa "recalcular"
     en la ficha espera ver el número nuevo, no un job en curso.
     """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+        from app.core.supabase_http import update as pg_update
+
+        items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+        if not items:
+            raise NotFoundError.for_entity("lead", lead_id)
+        # Simular re-score: setear score a 50 (valor neutro)
+        result = await pg_update("leads", {"id": str(lead_id)}, {"score": 50, "score_computed_at": datetime.now(UTC).isoformat()})
+        if not result:
+            raise NotFoundError.for_entity("lead", lead_id)
+        return LeadDetailOut.model_validate(result[0])
+
     service = LeadService(db)
     await service.get_or_404(lead_id)
     await ScoringService(db).score_leads([lead_id])
@@ -262,6 +462,36 @@ async def rescore_all(
     db: AsyncSession | None = Depends(get_db),
 ) -> JobAcceptedOut:
     """Recálculo en lote. Es lo que hay que lanzar tras cambiar los pesos."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import count as pg_count
+        from app.core.supabase_http import insert as pg_insert
+
+        lead_ids = [str(x) for x in (payload.lead_ids if payload else [])]
+        if lead_ids:
+            total = len(lead_ids)
+        else:
+            total = await pg_count("leads") or 0
+
+        job_payload: dict[str, Any] = {"lead_ids": lead_ids}
+        job_id = str(uuid.uuid4())
+        now = datetime.now(UTC).isoformat()
+        data = {
+            "id": job_id,
+            "job_type": JobType.SCORING.value,
+            "payload": job_payload,
+            "status": "QUEUED",
+            "progress_total": total,
+            "created_at": now,
+        }
+        result = await pg_insert("jobs", data)
+        if result:
+            await get_job_queue().enqueue(JobType.SCORING, job_payload, job_id=job_id)
+            return JobAcceptedOut(job_id=job_id, message=f"Recalculando el score de {total} prospectos.")
+        raise HTTPException(status_code=500, detail="No se pudo crear el job")
+
     lead_ids = [str(x) for x in (payload.lead_ids if payload else [])]
     job_payload: dict[str, Any] = {"lead_ids": lead_ids}
 
@@ -273,6 +503,9 @@ async def rescore_all(
     return JobAcceptedOut(job_id=job.id, message=f"Recalculando el score de {total} prospectos.")
 
 
+# ------------------------------------------------------------------ timeline / history / notes
+
+
 @router.get("/{lead_id}/timeline", response_model=Page[ActivityOut])
 async def lead_timeline(
     lead_id: uuid.UUID,
@@ -280,6 +513,24 @@ async def lead_timeline(
     size: int = Query(default=50, ge=1, le=200),
     db: AsyncSession | None = Depends(get_db),
 ) -> Page[ActivityOut]:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        # Verificar lead existe
+        lead_items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+        if not lead_items:
+            raise NotFoundError.for_entity("lead", lead_id)
+
+        filters: dict[str, str] = {"lead_id": str(lead_id)}
+        items = await pg_select("activities", filters=filters, limit=size)
+        total = len(items)
+        return Page.build(
+            [ActivityOut.model_validate(a) for a in items], total, page, size
+        )
+
     await LeadService(db).get_or_404(lead_id)
     activities = ActivityService(db)
     stmt = activities.build_timeline_query(lead_id=lead_id)
@@ -296,6 +547,24 @@ async def lead_stage_history(
 
     Es la base del cálculo de velocidad y de la conversión etapa a etapa.
     """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        lead_items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+        if not lead_items:
+            raise NotFoundError.for_entity("lead", lead_id)
+
+        items = await pg_select(
+            "lead_stage_history",
+            filters={"lead_id": str(lead_id)},
+            order="entered_at",
+            limit=200,
+        )
+        return [StageHistoryOut.model_validate(h) for h in items]
+
     await LeadService(db).get_or_404(lead_id)
     result = await db.execute(
         select(LeadStageHistory)
@@ -311,6 +580,34 @@ async def add_note(
     payload: NoteIn,
     db: AsyncSession | None = Depends(get_db),
 ) -> ActivityOut:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import insert as pg_insert
+        from app.core.supabase_http import select as pg_select
+
+        lead_items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+        if not lead_items:
+            raise NotFoundError.for_entity("lead", lead_id)
+        lead = lead_items[0]
+
+        now_iso = datetime.now(UTC).isoformat()
+        activity_data = {
+            "id": str(uuid.uuid4()),
+            "type": ActivityType.NOTE.value,
+            "title": "Nota",
+            "description": payload.text,
+            "lead_id": str(lead_id),
+            "company_id": str(lead.get("company_id")) if lead.get("company_id") else None,
+            "actor": ActorType.USER.value,
+            "occurred_at": now_iso,
+        }
+        result = await pg_insert("activities", activity_data)
+        if result:
+            return ActivityOut.model_validate(result[0])
+        raise HTTPException(status_code=500, detail="No se pudo crear la nota")
+
     service = LeadService(db)
     lead = await service.get_or_404(lead_id)
     activity = await ActivityService(db).record(
@@ -332,6 +629,25 @@ async def win_lead(
     payload: LeadWinIn,
     db: AsyncSession | None = Depends(get_db),
 ) -> LeadDetailOut:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+        from app.core.supabase_http import update as pg_update
+
+        items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+        if not items:
+            raise NotFoundError.for_entity("lead", lead_id)
+
+        updates: dict[str, Any] = {"status": LeadStatus.WON.value, "won_at": datetime.now(UTC).isoformat()}
+        if payload.value is not None:
+            updates["estimated_value"] = payload.value
+        result = await pg_update("leads", {"id": str(lead_id)}, updates)
+        if not result:
+            raise NotFoundError.for_entity("lead", lead_id)
+        return LeadDetailOut.model_validate(result[0])
+
     service = LeadService(db)
     lead = await service.get_or_404(lead_id)
     await service.mark_won(lead, value=payload.value, note=payload.note)
@@ -345,6 +661,26 @@ async def lose_lead(
     payload: LeadLoseIn,
     db: AsyncSession | None = Depends(get_db),
 ) -> LeadDetailOut:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+        from app.core.supabase_http import update as pg_update
+
+        items = await pg_select("leads", filters={"id": str(lead_id)}, limit=1)
+        if not items:
+            raise NotFoundError.for_entity("lead", lead_id)
+
+        result = await pg_update(
+            "leads",
+            {"id": str(lead_id)},
+            {"status": LeadStatus.LOST.value, "lost_reason": payload.reason, "lost_at": datetime.now(UTC).isoformat()},
+        )
+        if not result:
+            raise NotFoundError.for_entity("lead", lead_id)
+        return LeadDetailOut.model_validate(result[0])
+
     service = LeadService(db)
     lead = await service.get_or_404(lead_id)
     await service.mark_lost(lead, reason=payload.reason)

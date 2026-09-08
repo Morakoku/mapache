@@ -1,49 +1,44 @@
-name: Mapache CRM Scheduler
-#
-# Dispara cada 10 minutos el endpoint público /scheduler/trigger de Mapache CRM.
-# El endpoint es público (sin auth) porque lo llama un scheduler externo que no
-# puede manejar tokens HMAC. Ver docs/AGENT_CRON_SETUP.md y memory/state.json.
-#
-# Razón de GitHub Actions vs Vercel Cron:
-# Vercel Cron en Hobby/Free tier está limitado a 1 ejecución al día (ver
-# https://vercel.com/docs/cron-jobs/usage-and-pricing). Para intervalos cada
-# 10 minutos es necesario Pro ($20/mes) o un scheduler externo. GitHub Actions
-# gratis ofrece 2000 minutos/mes, suficiente para 6 ejecuciones/hora.
-#
+name: Mapache Scheduler
+
 on:
   schedule:
-    # Cada 10 minutos *sin importar el minuto inicial*: 0,10,20,30,40,50.
-    - cron: "*/10 * * * *"
+    # Cada 10 minutos
+    - cron: '*/10 * * * *'
+  # Permitir ejecución manual
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
-  trigger:
+  scheduler:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
     steps:
-      - name: Trigger Mapache scheduler
-        env:
-          MAPACHE_URL: ${{ secrets.MAPACHE_BASE_URL }}
-          MAPACHE_TOKEN: ${{ secrets.MAPACHE_SCHEDULER_TOKEN }}
+      - name: Health check + Alertas
         run: |
-          set -euo pipefail
-          if [ -z "$MAPACHE_URL" ]; then
-            echo "::error::Secreto MAPACHE_BASE_URL no configurado en este repositorio."
-            exit 1
-          fi
-          URL="${MAPACHE_URL%/}/scheduler/trigger"
-          echo "Disparando scheduler → $URL"
-          if [ -n "$MAPACHE_TOKEN" ]; then
-            curl -sS -X POST "$URL?token=$MAPACHE_TOKEN" \
-              -H "Accept: application/json" \
-              -H "Content-Type: application/json" \
-              -d '{"action":"ping"}'
-          else
-            curl -sS -X POST "$URL" \
-              -H "Accept: application/json" \
-              -H "Content-Type: application/json" \
-              -d '{"action":"ping"}'
-          fi
+          BASE="https://mapache-kappa.vercel.app"
+          
+          # 1. Verificar salud de servicios
+          echo "=== Health Check ==="
+          STATUS=$(curl -s "$BASE/api/v1/control/status")
+          echo "$STATUS"
+          
+          # 2. Obtener métricas
           echo ""
+          echo "=== Métricas ==="
+          METRICS=$(curl -s "$BASE/api/v1/control/metrics")
+          echo "$METRICS"
+          
+          # 3. Enviar alerta si hay problemas (el endpoint ya chequea internamente)
+          echo ""
+          echo "=== Alertas ==="
+          ALERT=$(curl -s "$BASE/api/v1/control/alert")
+          echo "$ALERT"
+          
+          # 4. Trigger scheduler (procesar jobs)
+          echo ""
+          echo "=== Scheduler Trigger ==="
+          TRIGGER=$(curl -s -X POST "$BASE/scheduler/trigger?action=process")
+          echo "$TRIGGER"
+          
+      - name: Log timestamp
+        run: echo "Scheduler ejecutado en $(date -u '+%Y-%m-%d %H:%M:%S UTC')"

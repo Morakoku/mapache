@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Body, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.exceptions import ConflictError
 from app.schemas.crm import (
     BoardColumnOut,
     BoardOut,
@@ -23,9 +24,25 @@ from app.services.pipeline_svc import PipelineService
 
 router = APIRouter()
 
+# ------------------------------------------------------------------ fallback helpers
+
+
+def _pg_table() -> str:
+    return "pipeline_stages"
+
 
 @router.get("/stages", response_model=list[StageOut])
 async def list_stages(db: AsyncSession | None = Depends(get_db)) -> list[StageOut]:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        filters: dict[str, str] | None = None
+        items = await pg_select(_pg_table(), filters=filters, limit=200)
+        return [StageOut.model_validate(s) for s in items]
+
     return [StageOut.model_validate(s) for s in await PipelineService(db).list_stages()]
 
 
@@ -34,6 +51,21 @@ async def create_stage(
     payload: StageIn,
     db: AsyncSession | None = Depends(get_db),
 ) -> StageOut:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import insert as pg_insert
+
+        data = dict(payload.model_dump(exclude_none=True))
+        data["id"] = data.get("id") or str(uuid.uuid4())
+        result = await pg_insert(_pg_table(), data)
+        if not result:
+            raise HTTPException(status_code=500, detail="No se pudo crear la etapa")
+        return StageOut.model_validate(result[0])
+
+    from fastapi import HTTPException
+
     stage = await PipelineService(db).create(payload.model_dump(exclude_none=True))
     await db.commit()
     return StageOut.model_validate(stage)
@@ -45,6 +77,23 @@ async def update_stage(
     payload: StageUpdate,
     db: AsyncSession | None = Depends(get_db),
 ) -> StageOut:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+        from app.core.supabase_http import update as pg_update
+
+        existing = await pg_select(_pg_table(), filters={"id": str(stage_id)}, limit=1)
+        if not existing:
+            raise NotFoundError.for_entity("stage", stage_id)
+
+        data = payload.model_dump(exclude_unset=True)
+        result = await pg_update(_pg_table(), {"id": str(stage_id)}, data)
+        if not result:
+            raise NotFoundError.for_entity("stage", stage_id)
+        return StageOut.model_validate(result[0])
+
     stage = await PipelineService(db).update(stage_id, payload.model_dump(exclude_unset=True))
     await db.commit()
     return StageOut.model_validate(stage)
@@ -61,6 +110,34 @@ async def delete_stage(
     Si la etapa tiene leads y no se indica destino, responde 409 con el
     recuento: nunca se borran prospectos por reorganizar el tablero.
     """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import delete as pg_delete
+        from app.core.supabase_http import select as pg_select
+        from app.core.supabase_http import update as pg_update
+
+        # Verificar existe
+        items = await pg_select(_pg_table(), filters={"id": str(stage_id)}, limit=1)
+        if not items:
+            raise NotFoundError.for_entity("stage", stage_id)
+
+        # Reubicar leads si se indica destino
+        moved = 0
+        if payload.move_to_stage_id is not None:
+            leads = await pg_select(
+                "leads", filters={"stage_id": str(stage_id)}, limit=200
+            )
+            for lead in leads:
+                await pg_update(
+                    "leads", {"id": lead["id"]}, {"stage_id": str(payload.move_to_stage_id)}
+                )
+                moved += 1
+
+        await pg_delete(_pg_table(), {"id": str(stage_id)})
+        return {"leads_moved": moved}
+
     moved = await PipelineService(db).delete(stage_id, move_to_stage_id=payload.move_to_stage_id)
     await db.commit()
     return {"leads_moved": moved}

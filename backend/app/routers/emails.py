@@ -8,8 +8,9 @@ sigue por `/jobs/{id}`.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -121,6 +122,43 @@ async def personalize_email(
     disponible, devuelve la plantilla renderizada con `is_ai_generated` en
     falso — el usuario nunca se queda sin borrador por culpa de la IA.
     """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        lead_items = await pg_select("leads", filters={"id": str(payload.lead_id)}, limit=1)
+        if not lead_items:
+            raise NotFoundError.for_entity("lead", payload.lead_id)
+        lead = lead_items[0]
+
+        template_items = (
+            await pg_select("email_templates", filters={"id": str(payload.template_id)}, limit=1)
+            if payload.template_id
+            else []
+        )
+        template = template_items[0] if template_items else None
+        if payload.template_id and not template:
+            raise NotFoundError.for_entity("template", payload.template_id)
+
+        from app.enrichment.email_verifier import verify_email as _verify  # noqa: F401
+
+        body_text = template.get("body_text", "") if template else ""
+        subject = template.get("subject", "") if template else ""
+        return PersonalizedDraftOut(
+            lead_id=lead["id"],
+            subject=subject or payload.subject or "",
+            body_text=body_text or payload.body_text or "",
+            reasoning="Generado desde la plantilla: la IA no estaba disponible.",
+            observation="",
+            cta="",
+            model="",
+            estimated_cost_usd=0.0,
+            warnings=[],
+            is_ai_generated=False,
+        )
+
     emails = EmailService(db)
     lead = await LeadService(db).get_or_404(payload.lead_id)
     settings = await emails.get_settings_row()
@@ -177,6 +215,56 @@ async def send(payload: SendIn, db: AsyncSession | None = Depends(get_db)) -> Jo
     Se valida aquí que exista una cuenta utilizable: fallar en el worker
     dejaría al usuario mirando un job fallido sin saber por qué.
     """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        account_items = await pg_select(
+            "email_accounts", filters={"id": str(payload.account_id)}, limit=1
+        )
+        if not account_items:
+            raise NotFoundError.for_entity("account", payload.account_id)
+        account_id = account_items[0]["id"]
+
+        job_payload = {
+            "account_id": account_id,
+            "drafts": [
+                {
+                    "lead_id": str(d.lead_id),
+                    "subject": d.subject,
+                    "body_text": d.body_text,
+                    "body_html": d.body_html,
+                    "template_id": str(d.template_id) if d.template_id else None,
+                    "was_edited": d.was_edited,
+                }
+                for d in payload.drafts
+            ],
+        }
+        import uuid as _uuid
+
+        job_id = str(_uuid.uuid4())
+        from app.core.supabase_http import insert as pg_insert
+
+        now = datetime.now(UTC).isoformat()
+        data = {
+            "id": job_id,
+            "job_type": "SEND_BATCH",
+            "payload": job_payload,
+            "status": "QUEUED",
+            "progress_total": len(payload.drafts),
+            "created_at": now,
+        }
+        result = await pg_insert("jobs", data)
+        if result:
+            await get_job_queue().enqueue(JobType.SEND_BATCH, job_payload, job_id=job_id)
+            return JobAcceptedOut(
+                job_id=job_id,
+                message=f"Enviando {len(payload.drafts)} correos.",
+            )
+        raise HTTPException(status_code=500, detail="No se pudo crear el job")
+
     emails = EmailService(db)
     account = await emails.resolve_account(payload.account_id)
 
@@ -215,6 +303,23 @@ async def list_emails(
     size: int = Query(default=50, ge=1, le=200),
     db: AsyncSession | None = Depends(get_db),
 ) -> Page[EmailMessageOut]:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        filters: dict[str, str] = {}
+        if lead_id is not None:
+            filters["lead_id"] = str(lead_id)
+        if email_status is not None:
+            filters["status"] = email_status.value
+        if direction is not None:
+            filters["direction"] = direction.value
+        items = await pg_select("email_messages", filters=filters if filters else None, limit=size)
+        total = len(items)
+        return Page.build([EmailMessageOut.model_validate(e) for e in items], total, page, size)
+
     stmt = select(EmailMessage).order_by(EmailMessage.created_at.desc())
     if lead_id is not None:
         stmt = stmt.where(EmailMessage.lead_id == lead_id)
@@ -229,6 +334,30 @@ async def list_emails(
 
 @router.get("/{email_id}", response_model=EmailDetailOut)
 async def get_email(email_id: uuid.UUID, db: AsyncSession | None = Depends(get_db)) -> EmailDetailOut:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+
+        items = await pg_select("email_messages", filters={"id": str(email_id)}, limit=1)
+        if not items:
+            raise NotFoundError.for_entity("email", email_id)
+        email = items[0]
+        events_items = await pg_select(
+            "email_events", filters={"email_message_id": str(email_id)}, limit=200
+        )
+        events = [EmailEventOut.model_validate(e) for e in events_items]
+        links_items = await pg_select(
+            "email_links", filters={"email_message_id": str(email_id)}, limit=200
+        )
+        links = [EmailLinkOut.model_validate(l) for l in links_items]
+        return EmailDetailOut(
+            **EmailMessageOut.model_validate(email).model_dump(),
+            events=events,
+            links=links,
+        )
+
     email = await _get_or_404(db, email_id)
     events = await _events_of(db, email_id)
     detail = EmailDetailOut.model_validate(email)
@@ -256,6 +385,28 @@ async def cancel_email(
     Solo vale en QUEUED: una vez el proveedor lo aceptó, ya salió y no hay
     nada que cancelar — decir lo contrario sería mentirle al usuario.
     """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+        from app.core.supabase_http import update as pg_update
+
+        items = await pg_select("email_messages", filters={"id": str(email_id)}, limit=1)
+        if not items:
+            raise NotFoundError.for_entity("email", email_id)
+        email = items[0]
+        if email.get("status") != "QUEUED":
+            raise ValidationError(
+                "Solo se puede cancelar un correo que todavía está en cola.",
+                code="EMAIL_NOT_CANCELLABLE",
+                details={"status": email.get("status")},
+            )
+        result = await pg_update("email_messages", {"id": str(email_id)}, {"status": "CANCELLED"})
+        if not result:
+            raise NotFoundError.for_entity("email", email_id)
+        return EmailMessageOut.model_validate(result[0])
+
     email = await _get_or_404(db, email_id)
     if email.status is not EmailStatus.QUEUED:
         raise ValidationError(
@@ -278,6 +429,59 @@ async def resend_email(
     Reenviar uno ya entregado sería spam para el prospecto, así que solo se
     permite sobre FAILED y CANCELLED.
     """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.use_postgrest or db is None:
+        from app.core.supabase_http import select as pg_select
+        from app.core.supabase_http import insert as pg_insert
+
+        items = await pg_select("email_messages", filters={"id": str(email_id)}, limit=1)
+        if not items:
+            raise NotFoundError.for_entity("email", email_id)
+        email = items[0]
+        if email.get("status") not in ("FAILED", "CANCELLED"):
+            raise ValidationError(
+                "Solo se reenvían correos fallidos o cancelados.",
+                code="EMAIL_NOT_RESENDABLE",
+                details={"status": email.get("status")},
+            )
+        if not email.get("lead_id"):
+            raise ValidationError(
+                "El correo no está asociado a ningún prospecto.", code="EMAIL_WITHOUT_LEAD"
+            )
+
+        job_payload = {
+            "account_id": email.get("email_account_id"),
+            "drafts": [
+                {
+                    "lead_id": str(email["lead_id"]),
+                    "subject": email["subject"],
+                    "body_text": email["subject"],
+                    "body_html": None,
+                    "template_id": None,
+                    "was_edited": False,
+                }
+            ],
+        }
+        import uuid as _uuid
+
+        job_id = str(_uuid.uuid4())
+        now = datetime.now(UTC).isoformat()
+        data = {
+            "id": job_id,
+            "job_type": "SEND_BATCH",
+            "payload": job_payload,
+            "status": "QUEUED",
+            "progress_total": 1,
+            "created_at": now,
+        }
+        result = await pg_insert("jobs", data)
+        if result:
+            await get_job_queue().enqueue(JobType.SEND_BATCH, job_payload, job_id=job_id)
+            return JobAcceptedOut(job_id=job_id, message=f"Reenviando a {email.get('to_email') or 'prospecto'}.")
+        raise HTTPException(status_code=500, detail="No se pudo crear el job")
+
     email = await _get_or_404(db, email_id)
     if email.status not in {EmailStatus.FAILED, EmailStatus.CANCELLED}:
         raise ValidationError(
