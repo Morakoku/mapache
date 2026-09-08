@@ -57,6 +57,7 @@ _PUBLIC_PREFIXES = (
     "/redoc",
     "/openapi.json",
     "/torre-control",
+    "/tc-api",
     "/email-simple-public",
 )
 

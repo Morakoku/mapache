@@ -13,7 +13,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
 _CSP = "default-src 'none'; frame-ancestors 'none'; sandbox; base-uri 'none'"
-_DOC_PATHS = ("/docs", "/redoc", "/openapi.json", "/api/v1/openapi.json")
+_DOC_PATHS = ("/docs", "/redoc", "/openapi.json", "/api/v1/openapi.json", "/torre-control", "/torre-control/", "/tc-api", "/tc-api/")
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
