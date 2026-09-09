@@ -59,11 +59,17 @@
 11. **[2026-09-07] Scraping requiere API key en serverless**
     Do instead: Configurar SerpAPI o ScraperAPI. Almacenar API key en `app_settings` tabla, no en código. Usar `decrypt()` para leer credenciales cifradas.
 
-12. **[2026-09-08] Scrapling necesita navegador para StealthyFetcher**
-    Do instead: `StealthyFetcher` requiere playwright + patchright + curl_cffi + msgspec + browserforge. No funciona en Vercel. Usar `StaticFetcher` para sitios sin JS, o correr en VPS dedicado. google-maps-scraper (Go) sí funciona en serverless como HTTP API.
+12. **[2026-09-08] Scrapling integrado como scraper principal (reemplaza google-maps-scraper.exe)**
+    Do instead: `ScraplingMapsScraper` en `backend/app/scrapers/scrapling_scraper.py` con `StealthyFetcher.fetch()` SÍNCRONO (no async_fetch), `extra_headers` (no headers), `Response.status` (no status_code), `css()` devuelve Selectors con `.first`. Tarjetas de Google Maps: `div.Nv2PK` + `a.hfpxzc` (aria-label=nombre), texto vía `get_all_text()`. Ficha detalle para teléfono/website: `enrich_details(url)`. Servidor local: `python -m uvicorn app.scrapers.scrapling_server:app --port 8081` (8080 lo ocupa Steam webhelper).
 
 13. **[2026-09-08] Resend integrado como proveedor de email serverless**
     Do instead: Usar `resend_api_key` en config. El endpoint `/api/v1/email-simple/send` funciona sin DB. Dominio `veyrasoluciones.com` verificado. No requiere autorizar destinatarios (vs Mailgun sandbox).
+
+14. **[2026-09-08] Scheduler local escribe en schema relacional, no tabla plana**
+    Do instead: Los resultados van a `companies` (upsert con `dedupe_key` truncado a 40 chars), con tipos convertidos (`rating` float, `reviews_count` int). NO existe tabla `scrape_results` — el schema es `searches -> search_runs -> search_results -> companies`. PostgREST OpenAPI (`GET /rest/v1/`) lista el schema exacto: consultarlo antes de insertar.
+
+15. **[2026-09-08] .env.local/.env.production de la raíz están sanitizados ("[SENSITIVE]")**
+    Do instead: Credenciales Supabase reales: `backend/.env` (repuesto desde `$LOCALAPPDATA/Temp/supabase_keys_full.json` + ref del JWT). Nunca cargar `.env.local` sanitizado con pydantic-settings — rompe la validación (`environment='[SENSITIVE]'`).
 
 ---
 
