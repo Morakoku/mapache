@@ -29,9 +29,17 @@ from typing import Any
 # Permitir correr como script directo (no solo -m)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# backend/.env ya contiene las credenciales Supabase (SUPABASE_URL,
-# SUPABASE_SERVICE_ROLE_KEY). No cargar .env.local de la raíz: está sanitizado
-# y rompe la validación de Settings.
+# Cargar SIEMPRE backend/.env por ruta absoluta — Task Scheduler ejecuta desde
+# otro cwd y pydantic-settings no lo encontraría. Las credenciales Supabase
+# viven ahí (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SECRET_KEY, etc.).
+try:
+    from dotenv import load_dotenv
+
+    _backend_env = Path(__file__).resolve().parent.parent / ".env"
+    if _backend_env.exists():
+        load_dotenv(_backend_env, override=False)
+except ImportError:
+    pass
 
 from app.core.config import get_settings  # noqa: E402
 from app.core.logging import get_logger  # noqa: E402
