@@ -24,6 +24,14 @@ router = APIRouter(dependencies=[Depends(require_idempotency)])
 
 @router.get("", response_model=list[SearchOut])
 async def list_searches(db: AsyncSession | None = Depends(get_db)) -> list[SearchOut]:
+    from app.core.config import get_settings
+    from app.core.supabase_http import select as pg_select
+
+    settings = get_settings()
+    if db is None or settings.use_postgrest:
+        items = await pg_select("searches", filters=None, limit=200)
+        return [SearchOut.model_validate(s) for s in items]
+
     return [SearchOut.model_validate(s) for s in await SearchService(db).list_all()]
 
 
