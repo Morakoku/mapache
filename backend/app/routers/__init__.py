@@ -38,6 +38,7 @@ from app.routers import (
     settings,
     suppression,
     templates,
+    torre_control,
     tracking,
 )
 from app.routers.security_schemes import SERVICE_BEARER
@@ -105,5 +106,13 @@ public_router.include_router(auth.router, prefix="/auth", tags=["oauth"])
 public_router.include_router(email_simple.router, prefix="/email-simple-public", tags=["email-simple-public"])
 public_router.include_router(public_dashboard.router, prefix="/api/v1/control", tags=["public-dashboard"])
 public_router.include_router(scheduler.router, prefix="/scheduler", tags=["scheduler"])
+
+# Torre de control (dashboard publico sin auth): HTML completo con servicios,
+# metricas, pipeline y contacto WhatsApp manual. Va en public_router porque el
+# ServiceAuthMiddleware ya trata /torre-control como prefijo publico y el
+# SecurityHeadersMiddleware lo exime del CSP restrictivo (JS inline).
+# Rutas resultantes: /torre-control/, /torre-control/status, /torre-control/metrics,
+# /torre-control/pipeline, /torre-control/contact-whatsapp*.
+public_router.include_router(torre_control.router, prefix="/torre-control", tags=["torre-control"])
 
 __all__ = ["api_router", "public_router"]

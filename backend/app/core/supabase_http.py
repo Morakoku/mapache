@@ -14,6 +14,13 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Owner determinista del pipeline de scraping. La constraint única de
+# companies es (owner_id, dedupe_key): si cada insert genera owner_id
+# nuevo, el mismo negocio se duplica en cada ciclo. Este valor es el
+# namespace fijo bajo el cual el scheduler hace upsert — los inserts
+# de otras fuentes (csv_import, API) traen su propio owner_id.
+_SCHEDULER_OWNER_ID = "00000000-0000-4000-8000-000000000001"
+
 
 async def select(
     table: str,
@@ -57,6 +64,54 @@ async def select(
         return []
 
 
+async def pg_count_exact(
+    table: str,
+    *,
+    filters: dict[str, str] | None = None,
+) -> int:
+    """Conteo exacto de filas vía Prefer: count=exact (Content-Range).
+
+    A diferencia de un select con limit (que satura en el limit), este
+    devuelve el total real de la tabla aunque haya miles de filas. Los
+    filtros aceptan la sintaxis PostgREST completa, ej.:
+    ``{"last_enriched_at": "not.is.null"}``.
+    """
+    import httpx
+
+    settings = get_settings()
+    if not settings.supabase_url or not settings.supabase_service_role_key_value:
+        return 0
+
+    url = settings.supabase_url.rstrip("/") + f"/rest/v1/{table}"
+    headers = {
+        "apikey": settings.supabase_service_role_key_value,
+        "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
+        "Prefer": "count=exact",
+    }
+    params: dict[str, str] = {"select": "id", "limit": "1"}
+    if filters:
+        for key, value in filters.items():
+            params[key] = value
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers, params=params)
+            if resp.status_code in (200, 206):
+                # Content-Range: "0-0/9688" (o "*/9688" si no hay filas)
+                content_range = resp.headers.get("content-range", "")
+                total = content_range.rsplit("/", 1)[-1]
+                return int(total) if total.isdigit() else 0
+            logger.warning(
+                "postgrest_count_exact_failed",
+                table=table,
+                status=resp.status_code,
+            )
+            return 0
+    except Exception as exc:
+        logger.error("postgrest_count_exact_error", table=table, error=str(exc))
+        return 0
+
+
 async def insert(
     table: str,
     data: dict[str, Any] | list[dict[str, Any]],
@@ -77,17 +132,24 @@ async def insert(
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }
+    # PostgREST necesita el query param on_conflict para saber sobre qué
+    # constraint hacer el merge; sin él, merge-duplicates responde 409
+    # en vez de fusionar. companies deduplica por (owner_id, dedupe_key).
+    on_conflict = "owner_id,dedupe_key" if table == "companies" else None
 
     # Si data no tiene id o dedupe_key, generarlos
     if isinstance(data, dict):
         if "id" not in data:
             data["id"] = str(uuid.uuid4())
         if "dedupe_key" not in data and table == "companies":
-            data["dedupe_key"] = data.get("name", "").lower().strip()
+            data["dedupe_key"] = data.get("name", "").lower().strip()[:40]
         # Campos NOT NULL de companies con defaults
         if table == "companies":
             if "owner_id" not in data:
-                data["owner_id"] = data["id"]  # owner_id = id del creador
+                # owner_id FIJO y determinista: la unique (owner_id, dedupe_key)
+                # solo deduplica si owner_id es constante entre ciclos. Un uuid4
+                # nuevo por fila hacía que merge-duplicates nunca fusionara.
+                data["owner_id"] = _SCHEDULER_OWNER_ID
             from datetime import datetime, UTC
             now = datetime.now(UTC).isoformat()
             if "first_extracted_at" not in data:
@@ -99,7 +161,12 @@ async def insert(
         async with httpx.AsyncClient(timeout=10.0) as client:
             if upsert:
                 headers["Prefer"] = "return=representation,resolution=merge-duplicates"
-            resp = await client.post(url, headers=headers, json=data)
+                params: dict[str, str] = {}
+                if on_conflict:
+                    params["on_conflict"] = on_conflict
+                resp = await client.post(url, headers=headers, json=data, params=params)
+            else:
+                resp = await client.post(url, headers=headers, json=data)
             if resp.status_code in (200, 201):
                 return resp.json()
             logger.warning("postgrest_insert_failed", table=table, status=resp.status_code, detail=resp.text)
