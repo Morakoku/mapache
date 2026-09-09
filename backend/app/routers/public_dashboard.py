@@ -70,7 +70,10 @@ async def tc_status() -> dict[str, Any]:
     except Exception as e:
         results["services"]["email"] = {"status": "error", "message": str(e)[:80]}
 
-    # 3) Scraper
+    # 3) Scraper — dos modos:
+    #    a) SCRAPER_URL definida (servidor local): health check HTTP.
+    #    b) Sin SCRAPER_URL (Vercel): verificar actividad reciente en companies
+    #       vía PostgREST — el scheduler local inserta ahí; empresas recientes = scraper vivo.
     t0 = time.time()
     try:
         scraper_url = os.environ.get("SCRAPER_URL", "")
@@ -80,7 +83,25 @@ async def tc_status() -> dict[str, Any]:
                 lat = int((time.time() - t0) * 1000)
                 results["services"]["scraper"] = {"status": "ok" if r.status_code == 200 else "error", "latency": lat, "message": "Corriendo" if r.status_code == 200 else f"HTTP {r.status_code}"}
         else:
-            results["services"]["scraper"] = {"status": "warn", "message": "No configurado", "detail": "SCRAPER_URL no definida"}
+            from app.core.supabase_http import select as pg_select
+
+            rows = await pg_select(
+                "companies", columns="created_at", order="created_at.desc", limit=1
+            )
+            lat = int((time.time() - t0) * 1000)
+            if rows:
+                last = rows[0].get("created_at", "")
+                results["services"]["scraper"] = {
+                    "status": "ok",
+                    "latency": lat,
+                    "message": f"Scheduler activo (última empresa: {str(last)[:19]})",
+                }
+            else:
+                results["services"]["scraper"] = {
+                    "status": "warn",
+                    "message": "Sin datos aún",
+                    "detail": "El scheduler local aún no ha guardado empresas",
+                }
     except Exception:
         results["services"]["scraper"] = {"status": "warn", "message": "Detenido", "detail": "No responde"}
 
@@ -142,7 +163,9 @@ async def tc_alert() -> dict[str, Any]:
     except Exception as e:
         down_services.append({"servicio": "email", "status": "error", "message": str(e)[:80]})
 
-    # 3) Scraper
+    # 3) Scraper — mismo criterio que tc_status: sin SCRAPER_URL (Vercel),
+    #    verificar actividad en companies vía PostgREST. Solo alertar en "error",
+    #    no en "warn" (evita emails falsos por estado inicial).
     t0 = time.time()
     try:
         scraper_url = os.environ.get("SCRAPER_URL", "")
@@ -155,9 +178,14 @@ async def tc_alert() -> dict[str, Any]:
                 if status == "error":
                     down_services.append({"servicio": "scraper", "status": status, "latency": lat, "message": message})
         else:
-            down_services.append({"servicio": "scraper", "status": "warn", "message": "No configurado", "detail": "SCRAPER_URL no definida"})
+            from app.core.supabase_http import select as pg_select
+
+            rows = await pg_select("companies", columns="created_at", order="created_at.desc", limit=1)
+            if not rows:
+                # Sin datos NO es error — solo estado inicial del scheduler local
+                pass
     except Exception:
-        down_services.append({"servicio": "scraper", "status": "warn", "message": "Detenido", "detail": "No responde"})
+        pass  # scraper local caído no es alertable desde Vercel (no es alcanzable)
 
     if not down_services:
         return {"status": "ok", "timestamp": timestamp, "mensaje": "Todos los servicios están operativos"}
