@@ -15,15 +15,17 @@ exime del CSP restrictivo.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
+import threading
 import time
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote as url_quote
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -840,3 +842,248 @@ async def contact_whatsapp_attempt(
     except Exception as exc:
         logger.error("whatsapp_attempt_error", lead_id=lead_id, error=str(exc))
         raise HTTPException(status_code=500, detail=f"Error registrando intento: {exc}") from exc
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Intake público desde el sitio web (veyrasoluciones.com)
+# ──────────────────────────────────────────────────────────────────────────
+# El formulario de contacto del sitio necesita un destino durable para sus
+# leads. Este endpoint vive bajo /torre-control (prefijo público exento de la
+# autenticación de servicio) y escribe en el CRM vía PostgREST:
+# companies + contacts (source=WEBSITE) + leads (stage "new") + task de
+# revisión + activity LEAD_CREATED.
+#
+# Diferencias con /api/v1/intake/business-mri: aquel exige token de servicio
+# firmado (scope hermes.business_mri.intake) y una sesión de BD asyncpg, que
+# no existe en Vercel serverless. Este usa el mismo mapeo pero por PostgREST
+# con la service role key, que es como el resto de /torre-control accede a la
+# base. No expone PII en las respuestas: solo el lead_id generado.
+
+_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+# Rate limit propio del intake (el RateLimitMiddleware solo cubre /api/v1 y
+# /tracking; /torre-control pasa sin contador). Ventana deslizante en memoria:
+# suficiente para el volumen de un formulario, mismo espíritu que NonceStore.
+_INTAKE_LIMIT = 10  # envíos por IP
+_INTAKE_WINDOW = 3600.0  # ventana en segundos
+_intake_hits: dict[str, list[float]] = {}
+_intake_lock = threading.Lock()
+
+
+def _intake_allow(ip: str, *, now: float | None = None) -> bool:
+    current = time.monotonic() if now is None else now
+    cutoff = current - _INTAKE_WINDOW
+    with _intake_lock:
+        times = [t for t in _intake_hits.get(ip, []) if t > cutoff]
+        if len(times) >= _INTAKE_LIMIT:
+            _intake_hits[ip] = times
+            return False
+        times.append(current)
+        _intake_hits[ip] = times
+        return True
+
+
+class WebsiteIntakeIn(BaseModel):
+    """Payload del formulario de contacto de veyrasoluciones.com."""
+
+    name: str
+    email: str
+    company_name: str | None = None
+    company_process: str
+    phone: str | None = None
+    city: str | None = None
+    sector: str | None = None
+    goal: str | None = None
+    bottleneck: str | None = None
+    priority: str | None = None
+    budget: str | None = None
+
+
+def _clean(value: str | None, max_len: int) -> str:
+    """Recorta y sanea un campo de texto; None se vuelve cadena vacía."""
+    if not isinstance(value, str):
+        return ""
+    return value.strip()[:max_len]
+
+
+@router.post("/intake", status_code=201)
+async def website_intake(payload: WebsiteIntakeIn, request: Request) -> dict[str, Any]:
+    """Crea un lead en el CRM desde el formulario del sitio web.
+
+    Rate limit propio por IP (10/hora): un formulario real no supera eso y
+    un bot lo hace de inmediato. El middleware global no cubre /torre-control.
+
+    Flujo (todo vía PostgREST, sin sesión de BD):
+      1. companies: upsert por dedupe_key (sha256 del email) → la empresa.
+      2. contacts: contacto principal con source=WEBSITE.
+      3. leads: lead en stage "new", status NEW, source WEBSITE.
+      4. tasks: tarea de revisión para el operador.
+      5. activities: LEAD_CREATED con metadata del origen.
+
+    El dedupe_key evita duplicar la empresa si el mismo prospecto envía el
+    formulario dos veces: el upsert fusiona la ficha en lugar de crear otra.
+    """
+    from app.core.postgrest_client import pg_insert, pg_insert_upsert
+    from app.core.supabase_http import select as pg_select
+
+    forwarded = request.headers.get("x-forwarded-for", "")
+    ip = forwarded.split(",")[0].strip() if forwarded else (
+        request.client.host if request.client else "unknown"
+    )
+    if not _intake_allow(ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Demasiadas solicitudes desde esta conexión. Intenta más tarde.",
+        )
+
+    nombre = _clean(payload.name, 120)
+    email = _clean(payload.email, 254).lower()
+    empresa = _clean(payload.company_name, 255) or nombre
+    proceso = _clean(payload.company_process, 2000)
+
+    if not nombre or len(nombre) < 2:
+        raise HTTPException(status_code=422, detail="El nombre es obligatorio.")
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(status_code=422, detail="El correo no es válido.")
+    if not proceso or len(proceso) < 10:
+        raise HTTPException(
+            status_code=422,
+            detail="Describe brevemente tu empresa y el reto (mínimo 10 caracteres).",
+        )
+
+    settings = get_settings()
+    if not settings.supabase_url or not settings.supabase_service_role_key_value:
+        logger.error("intake_not_configured")
+        raise HTTPException(status_code=503, detail="Captura no configurada.")
+
+    now_iso = datetime.now(UTC).isoformat()
+    dedupe_key = hashlib.sha256(f"veyra-website:{email}".encode()).hexdigest()[:40]
+
+    # 0. Etapa inicial del pipeline (se valida ANTES de escribir: si el
+    #    pipeline no existe, no queda media empresa huérfana en la base).
+    # Nota: el helper `select` de supabase_http prefija cada filtro con `eq.`,
+    #    así que `owner_id is null` no se puede expresar ahí. Se consulta la
+    #    etapa "new" y se prefiere la del sistema (owner_id nulo) en Python.
+    stages = await pg_select(
+        "pipeline_stages",
+        columns="id,stage_key,owner_id",
+        filters={"stage_key": "new"},
+        order="position.asc",
+        limit=10,
+    )
+    system_stages = [s for s in stages if s.get("owner_id") is None]
+    target_stage = (system_stages or stages or [None])[0]
+    if not target_stage:
+        logger.error("intake_stage_missing")
+        raise HTTPException(status_code=503, detail="Pipeline no inicializado.")
+    stage_id = target_stage["id"]
+
+    # 1. Empresa (upsert merge por dedupe_key del namespace del sitio web).
+    # La constraint unica de companies es (owner_id, dedupe_key): el mismo
+    # email desde el sitio siempre cae en la misma ficha.
+    company_payload = {
+        "name": empresa,
+        "email": email,
+        "dedupe_key": dedupe_key,
+        "description": proceso[:500],
+        "owner_id": "00000000-0000-4000-8000-000000000002",
+        "first_extracted_at": now_iso,
+        "last_extracted_at": now_iso,
+    }
+    if _clean(payload.city, 80):
+        company_payload["city"] = _clean(payload.city, 80)
+
+    company = await pg_insert_upsert("companies", company_payload, on_conflict="owner_id,dedupe_key")
+    if not company:
+        logger.error("intake_company_failed", email_hash=hashlib.sha256(email.encode()).hexdigest()[:12])
+        raise HTTPException(
+            status_code=502, detail="No se pudo registrar la empresa. Intenta de nuevo."
+        )
+    company_id = company[0].get("id")
+
+    # 2. Contacto principal (source=WEBSITE según el enum del CRM).
+    contacto = await pg_insert(
+        "contacts",
+        {
+            "company_id": company_id,
+            "full_name": nombre,
+            "email": email,
+            "phone": _clean(payload.phone, 40) or None,
+            "source": "WEBSITE",
+            "is_primary": True,
+        },
+    )
+    if not contacto:
+        logger.error("intake_contact_failed", company=str(company_id))
+        raise HTTPException(
+            status_code=502, detail="No se pudo registrar el contacto. Intenta de nuevo."
+        )
+    contact_id = contacto[0].get("id") if isinstance(contacto, list) else contacto.get("id")
+
+    # 3. Lead en la etapa inicial (stage_id ya validado en el paso 0).
+    lead = await pg_insert(
+        "leads",
+        {
+            "company_id": company_id,
+            "contact_id": contact_id,
+            "stage_id": stage_id,
+            "status": "NEW",
+            "source": "WEBSITE",
+        },
+    )
+    if not lead:
+        logger.error("intake_lead_failed", company=str(company_id))
+        raise HTTPException(status_code=502, detail="No se pudo registrar la solicitud.")
+    lead_id = lead[0].get("id") if isinstance(lead, list) else lead.get("id")
+
+    # 4. Tarea de revisión (mismo título que usa el intake autenticado).
+    await pg_insert(
+        "tasks",
+        {
+            "lead_id": lead_id,
+            "contact_id": contact_id,
+            "title": "Intake Review",
+            "description": "Solicitud Business MRI desde veyrasoluciones.com. Revisar y clasificar.",
+            "priority": 1,
+        },
+    )
+
+    # 5. Activity con el contexto completo del formulario para el operador.
+    extras: dict[str, Any] = {}
+    if _clean(payload.sector, 120):
+        extras["sector"] = _clean(payload.sector, 120)
+    if _clean(payload.goal, 300):
+        extras["objetivo"] = _clean(payload.goal, 300)
+    if _clean(payload.bottleneck, 2000):
+        extras["cuello_de_botella"] = _clean(payload.bottleneck, 2000)
+    if _clean(payload.priority, 80):
+        extras["prioridad"] = _clean(payload.priority, 80)
+    if _clean(payload.budget, 60):
+        extras["presupuesto"] = _clean(payload.budget, 60)
+
+    await pg_insert(
+        "activities",
+        {
+            "lead_id": lead_id,
+            "contact_id": contact_id,
+            "company_id": company_id,
+            "activity_type": "LEAD_CREATED",
+            "actor_type": "SYSTEM",
+            "subject": "Lead creado desde el sitio web",
+            "body": proceso,
+            "is_system_generated": True,
+            "metadata": {"origen": "veyrasoluciones.com", "canal": "formulario-contacto", **extras},
+        },
+    )
+
+    logger.info(
+        "intake_website_ok",
+        lead_id=str(lead_id),
+        company=str(company_id),
+        email_hash=hashlib.sha256(email.encode()).hexdigest()[:12],
+    )
+    return {
+        "status": "CREATED",
+        "lead_id": str(lead_id),
+        "message": "Solicitud registrada en el CRM.",
+    }

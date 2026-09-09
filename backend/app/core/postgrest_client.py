@@ -110,8 +110,44 @@ async def pg_insert(table: str, data: dict[str, Any] | list[dict[str, Any]]) -> 
         return []
 
 
+async def pg_insert_upsert(
+    table: str,
+    data: dict[str, Any],
+    on_conflict: str | None = None,
+) -> list[dict[str, Any]]:
+    """INSERT con resolution=merge-duplicates via PostgREST.
+
+    Devuelve la fila fusionada si ya existía (por la constraint unica que
+    indique on_conflict) o la fila nueva. En fallo devuelve lista vacia.
+    """
+    settings = get_settings()
+    if not settings.supabase_url or not settings.supabase_service_role_key_value:
+        return []
+
+    url = settings.supabase_url.rstrip("/") + f"/rest/v1/{table}"
+    headers = {
+        "apikey": settings.supabase_service_role_key_value,
+        "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation,resolution=merge-duplicates",
+    }
+    params: dict[str, str] = {}
+    if on_conflict:
+        params["on_conflict"] = on_conflict
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, headers=headers, json=data, params=params)
+            if resp.status_code in (200, 201):
+                return resp.json() if isinstance(resp.json(), list) else [resp.json()]
+            logger.warning("pg_insert_upsert_failed", table=table, status=resp.status_code)
+            return []
+    except Exception as e:
+        logger.error("pg_insert_upsert_error", table=table, error=str(e))
+        return []
+
+
 async def pg_update(table: str, filters: dict[str, str], data: dict[str, Any]) -> list[dict[str, Any]]:
-    """UPDATE via PostgREST."""
     settings = get_settings()
     if not settings.supabase_url or not settings.supabase_service_role_key_value:
         return []
