@@ -1,11 +1,12 @@
 """Torre de control Mapache CRM - 100% funcional.
 
 Además del dashboard y los checks de salud, expone el estado del pipeline
-de scraping (empresas, enriquecimiento, leads, runs del scheduler) y el
-contacto manual de leads por WhatsApp: lista de contactables (empresa con
-teléfono), generación de copys de primer contacto en dos variantes, y
-registro de intentos con el mismo insert en activities que usa
-/api/v1/contact-queue.
+de scraping (empresas, enriquecimiento, leads, runs del scheduler), el
+contacto manual de leads por WhatsApp (lista de contactables, copys de
+primer contacto, registro de intentos) y la gestión de plantillas de email
+con la secuencia Veyra MRI Outbound: listado/preview/edición de
+email_templates vía PATCH, y activación/pausa de sequences (sin worker: el
+envío real lo controla el warm-up script).
 
 Se monta en public_router bajo el prefijo /torre-control (dashboard
 público, sin auth de servicio): el ServiceAuthMiddleware ya trata
@@ -93,6 +94,48 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 .wa-text:focus{outline:none;border-color:var(--accent)}
 .wa-count{font-size:11px;color:var(--muted);text-align:right;margin-top:4px}
 .wa-count.over{color:var(--red)}
+/* --- Card Plantillas --- */
+.tpl-toolbar{display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.tpl-select{background:#000;border:1px solid var(--border);color:var(--fg);padding:8px 12px;border-radius:8px;font-size:13px;font-family:inherit}
+.tpl-select:focus{outline:none;border-color:var(--accent)}
+.tpl-list{display:flex;flex-direction:column;gap:8px;max-height:520px;overflow-y:auto}
+.tpl-item{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--border);border-radius:10px;padding:12px 14px;flex-wrap:wrap}
+.tpl-item.inactive{opacity:.55}
+.tpl-name{font-size:14px;font-weight:700}
+.tpl-subject{font-size:12px;color:var(--muted);margin-top:2px;max-width:560px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tpl-meta{font-size:11px;color:var(--muted);margin-top:4px}
+.tpl-cat{color:var(--blue)}
+.tpl-inactive{color:var(--red);font-weight:600;margin-left:6px}
+.tpl-actions{display:flex;gap:8px}
+/* --- Secuencia Veyra MRI --- */
+.seq-steps{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.seq-step{display:flex;gap:12px;align-items:flex-start;border-left:2px solid var(--accent);padding:4px 0 4px 14px}
+.seq-day{font-size:12px;font-weight:700;color:var(--accent);min-width:58px;padding-top:2px}
+.seq-step-name{font-size:13px;font-weight:600}
+.seq-step-subject{font-size:12px;color:var(--muted);margin-top:2px}
+.seq-btns{display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap}
+.seq-note{font-size:12px;color:var(--yellow);margin-top:8px;display:none}
+.seq-note.show{display:block}
+/* --- Modales (preview y edicion de plantillas) --- */
+/* Los modales viven FUERA de los contenedores que se re-renderizan: el
+   refresh nunca toca su DOM, igual que el patron de la card WhatsApp. */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:50;align-items:center;justify-content:center;padding:24px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:760px;max-height:90vh;overflow-y:auto}
+.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+.modal-title{font-size:16px;font-weight:700}
+.pv-frame{width:100%;height:420px;border:1px solid var(--border);border-radius:8px;background:#fff}
+.pv-text-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:12px 0 6px}
+.pv-text{background:#000;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;white-space:pre-wrap;max-height:140px;overflow-y:auto}
+.ed-label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:12px 0 6px}
+.ed-hint{text-transform:none;letter-spacing:0;color:var(--muted)}
+.ed-input{width:100%;background:#000;border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:10px;font-family:inherit;font-size:13px;line-height:1.5;resize:vertical}
+.ed-code{font-family:'SF Mono','Fira Code',monospace;font-size:12px}
+.ed-input:focus{outline:none;border-color:var(--accent)}
+.ed-msg{font-size:12px;margin-top:10px;min-height:16px}
+.ed-msg.ok{color:var(--green)}
+.ed-msg.err{color:var(--red)}
+.ed-msg.warn{color:var(--yellow)}
 </style>
 </head>
 <body>
@@ -105,7 +148,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 </div>
 <div class="refresh-bar">
 <div style="display:flex;gap:10px">
-<button class="refresh-btn" onclick="loadAll();loadPipeline();loadWhatsApp()">🔄 Refrescar</button>
+<button class="refresh-btn" onclick="loadAll();loadPipeline();loadWhatsApp();loadTemplates();loadSequenceStatus()">🔄 Refrescar</button>
 <button class="refresh-btn" onclick="toggleAuto()">⏱ <span id="auto-txt">ON</span></button>
 </div>
 <span style="color:var(--muted);font-size:12px">Cada 10s</span>
@@ -138,9 +181,66 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 <div class="wa-list" id="wa-list"><div class="card-sub">Cargando leads...</div></div>
 <div class="card-sub" style="margin-top:10px">Genera copys, edítalos si quieres, abre WhatsApp con el texto listo y marca el intento. Los copys usan los datos reales de la ficha del negocio.</div>
 </div>
+<div class="card" style="margin-bottom:30px">
+<div class="card-header">
+<span class="card-title">🎨 Plantillas</span>
+<span style="font-size:12px;color:var(--muted)"><span id="tpl-total">--</span> plantillas</span>
+</div>
+<div class="tpl-toolbar">
+<select id="tpl-cat" class="tpl-select" onchange="tplSetFilter(this.value)"></select>
+<span class="card-sub" id="tpl-filter-count"></span>
+</div>
+<div class="tpl-list" id="tpl-list"><div class="card-sub">Cargando plantillas...</div></div>
+<div class="card-sub" style="margin-top:10px">Preview en iframe aislado (sin scripts) y edicion directa. Al guardar se valida que las variables [Nombre] y [sector de la empresa] no se borren: el personalizador del warm-up las reemplaza por los datos del contacto.</div>
+<div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px">
+<div class="card-header">
+<span class="card-title">Secuencia Veyra MRI 30d</span>
+<span id="seq-pill" class="pill off">--</span>
+</div>
+<div id="seq-body"><div class="card-sub">Cargando secuencia...</div></div>
+<div class="seq-note" id="seq-note"></div>
+</div>
+</div>
 <div class="card">
 <div class="card-header"><span class="card-title">📋 Logs</span><button class="btn btn-blue" onclick="clearLogs()">Limpiar</button></div>
 <div class="logs" id="logs"><div class="log-e"><span class="log-t">--:--:--</span><span class="log-info">Cargando...</span></div></div>
+</div>
+<!-- Modal: preview de plantilla. sandbox SIN allow-scripts: las plantillas
+     traen style inline, no JS, y asi nada dentro del preview puede ejecutar. -->
+<div class="modal-overlay" id="modal-preview" onclick="if(event.target===this)pvClose()">
+<div class="modal">
+<div class="modal-head">
+<div>
+<div class="modal-title" id="pv-title"></div>
+<div class="card-sub" id="pv-meta"></div>
+</div>
+<button class="btn btn-sm btn-outline" onclick="pvClose()">Cerrar</button>
+</div>
+<iframe id="pv-frame" class="pv-frame" sandbox="allow-same-origin" title="Preview de plantilla"></iframe>
+<div class="pv-text-label">Version texto plano</div>
+<div class="pv-text" id="pv-text"></div>
+</div>
+</div>
+<!-- Modal: edicion de plantilla. Se cierra SOLO con sus botones: un click
+     fuera o Escape no debe descartar ediciones a medio hacer. -->
+<div class="modal-overlay" id="modal-edit">
+<div class="modal">
+<div class="modal-head">
+<div class="modal-title" id="ed-title"></div>
+<button class="btn btn-sm btn-outline" onclick="edClose()">Cerrar</button>
+</div>
+<label class="ed-label" for="ed-subject">Asunto</label>
+<textarea id="ed-subject" class="ed-input" rows="2"></textarea>
+<label class="ed-label" for="ed-html">Body HTML <span class="ed-hint">(conserva [Nombre] y [sector de la empresa] si la plantilla los usa)</span></label>
+<textarea id="ed-html" class="ed-input ed-code" rows="14"></textarea>
+<label class="ed-label" for="ed-text">Body texto plano</label>
+<textarea id="ed-text" class="ed-input" rows="5"></textarea>
+<div class="ed-msg" id="ed-msg"></div>
+<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
+<button class="btn btn-sm btn-outline" onclick="edClose()">Cancelar</button>
+<button class="btn btn-sm btn-on" id="ed-save" onclick="tplSave()">Guardar</button>
+</div>
+</div>
 </div>
 <script>
 const API='/torre-control';
@@ -311,6 +411,197 @@ document.getElementById(`wa-${id}`).classList.add('done');
 log('Intento registrado: '+(l?.company||id),'ok');
 }catch(e){log('Marcar: '+e.message,'err')}
 }
+// --- Plantillas de email ---
+// Se cargan al abrir y con el boton Refrescar (NO en el auto-refresh de 10s:
+// son 26 HTML completos y datos de configuracion estable, como el pipeline).
+// Los modales de preview/edicion viven fuera del contenedor re-renderizado,
+// asi que un refresh manual no cierra nada ni pierde ediciones.
+let tplData=[];
+let tplFilter='';
+let tplEditId=null;         // plantilla abierta en el editor (o null)
+let tplEditOriginal={};     // valores cargados del servidor para detectar cambios
+async function loadTemplates(){
+try{
+const r=await fetch(API+'/templates',{cache:'no-store'});
+if(!r.ok)throw new Error('HTTP '+r.status);
+const d=await r.json();
+if(d.error){log('Plantillas: '+d.error,'err');return}
+tplData=d.templates||[];
+document.getElementById('tpl-total').textContent=d.total??0;
+// Select de categorias: se reconstruye en cada carga pero conservando la
+// seleccion activa para que el refresh no resetee el filtro.
+const sel=document.getElementById('tpl-cat');
+const cats=(d.categories||[]).filter(c=>c);
+const prev=sel.value;
+sel.innerHTML='<option value="">Todas ('+tplData.length+')</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+if(cats.includes(prev))sel.value=prev;
+tplFilter=sel.value;
+renderTemplates();
+log('Plantillas: '+tplData.length+' cargadas','ok');
+}catch(e){log('Plantillas: '+e.message,'err');document.getElementById('tpl-list').innerHTML='<div class="card-sub">Error cargando plantillas: '+esc(e.message)+'</div>'}
+}
+function tplSetFilter(v){tplFilter=v||'';renderTemplates()}
+function renderTemplates(){
+const el=document.getElementById('tpl-list');
+const list=tplFilter?tplData.filter(t=>(t.category||'Sin categoría')===tplFilter):tplData;
+document.getElementById('tpl-filter-count').textContent=list.length+' visibles';
+if(!list.length){el.innerHTML='<div class="card-sub">No hay plantillas'+(tplFilter?' en esta categoría':'')+'.</div>';return}
+el.innerHTML=list.map(t=>{
+const inact=t.is_active?'':' inactive';
+return`<div class="tpl-item${inact}">
+<div style="min-width:0;flex:1">
+<div class="tpl-name">${esc(t.name)}</div>
+<div class="tpl-subject">${esc(t.subject)||'(sin asunto)'}</div>
+<div class="tpl-meta"><span class="tpl-cat">${esc(t.category||'Sin categoría')}</span> · usos: ${t.usage_count??0} · último uso: ${t.last_used_at?esc(String(t.last_used_at).slice(0,10)):'nunca'}${t.is_active?'':'<span class="tpl-inactive">INACTIVA</span>'}</div>
+</div>
+<div class="tpl-actions">
+<button class="btn btn-sm btn-outline" onclick="tplPreview('${t.id}')">Ver</button>
+<button class="btn btn-sm btn-accent" onclick="tplEdit('${t.id}')">Editar</button>
+</div>
+</div>`}).join('');
+}
+// Preview: iframe con sandbox="allow-same-origin" (sin allow-scripts) y el
+// HTML inyectado via srcdoc. Los style inline de las plantillas renderizan
+// igual; nada puede ejecutar JS ni tocar el dashboard.
+async function tplPreview(id){
+const t=tplData.find(x=>x.id===id);if(!t)return;
+edClose(); // un solo modal a la vez
+const ov=document.getElementById('modal-preview');
+document.getElementById('pv-title').textContent=t.name||id;
+document.getElementById('pv-meta').textContent=(t.category||'Sin categoría')+' · '+(t.subject||'(sin asunto)');
+const frame=document.getElementById('pv-frame');
+frame.srcdoc='<p style="font-family:monospace;padding:12px">Cargando preview...</p>';
+document.getElementById('pv-text').textContent='';
+ov.classList.add('open');
+try{
+const r=await fetch(API+`/templates/${id}`,{cache:'no-store'});
+if(!r.ok)throw new Error('HTTP '+r.status);
+const d=await r.json();
+if(d.error)throw new Error(d.error);
+frame.srcdoc=d.template?.body_html||'<p style="font-family:monospace;padding:12px">(plantilla sin body_html)</p>';
+document.getElementById('pv-text').textContent=d.template?.body_text||'(sin versión de texto)';
+log('Preview: '+(t.name||id),'ok');
+}catch(e){
+frame.srcdoc='<p style="color:#ff1744;font-family:monospace;padding:12px">Error cargando preview: '+esc(e.message)+'</p>';
+log('Preview: '+e.message,'err');
+}
+}
+function pvClose(){document.getElementById('modal-preview').classList.remove('open')}
+// Edicion: trae la plantilla completa, precarga los textareas y guarda solo
+// los campos que cambiaron (PATCH parcial). El backend rechaza con 400 si
+// la edicion borra [Nombre] o [sector de la empresa].
+async function tplEdit(id){
+const t=tplData.find(x=>x.id===id);if(!t)return;
+pvClose();
+try{
+const r=await fetch(API+`/templates/${id}`,{cache:'no-store'});
+if(!r.ok)throw new Error('HTTP '+r.status);
+const d=await r.json();
+if(d.error)throw new Error(d.error);
+tplEditId=id;
+tplEditOriginal={subject:d.template?.subject||'',body_html:d.template?.body_html||'',body_text:d.template?.body_text||''};
+document.getElementById('ed-title').textContent='Editar: '+(t.name||id);
+document.getElementById('ed-subject').value=tplEditOriginal.subject;
+document.getElementById('ed-html').value=tplEditOriginal.body_html;
+document.getElementById('ed-text').value=tplEditOriginal.body_text;
+const msg=document.getElementById('ed-msg');
+msg.textContent='';msg.className='ed-msg';
+document.getElementById('ed-save').disabled=false;
+document.getElementById('modal-edit').classList.add('open');
+}catch(e){log('Editar: '+e.message,'err')}
+}
+function edClose(){
+document.getElementById('modal-edit').classList.remove('open');
+tplEditId=null;tplEditOriginal={};
+}
+async function tplSave(){
+if(!tplEditId)return;
+const subject=document.getElementById('ed-subject').value;
+const body_html=document.getElementById('ed-html').value;
+const body_text=document.getElementById('ed-text').value;
+const msg=document.getElementById('ed-msg');
+if(!subject.trim()){msg.textContent='El asunto no puede quedar vacío';msg.className='ed-msg err';return}
+if(!body_html.trim()){msg.textContent='El body HTML no puede quedar vacío';msg.className='ed-msg err';return}
+// PATCH minimalista: solo los campos que el usuario realmente cambió.
+const payload={};
+if(subject!==tplEditOriginal.subject)payload.subject=subject;
+if(body_html!==tplEditOriginal.body_html)payload.body_html=body_html;
+if(body_text!==tplEditOriginal.body_text)payload.body_text=body_text;
+if(!Object.keys(payload).length){msg.textContent='Sin cambios que guardar';msg.className='ed-msg warn';return}
+const nombre=(tplData.find(x=>x.id===tplEditId)||{}).name||tplEditId;
+document.getElementById('ed-save').disabled=true;
+msg.textContent='Guardando...';msg.className='ed-msg';
+try{
+const r=await fetch(API+`/templates/${tplEditId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+const d=await r.json().catch(()=>({}));
+if(!r.ok)throw new Error(d.detail||('HTTP '+r.status));
+msg.textContent='Guardado: la plantilla se actualizó en Supabase.';
+msg.className='ed-msg ok';
+log('Plantilla guardada: '+nombre,'ok');
+await loadTemplates();       // refetch del listado con los datos nuevos
+loadSequenceStatus();        // por si la plantilla editada esta enlazada a un paso
+// Cierre automatico solo si sigue abierta esta misma plantilla (evita
+// cerrar un modal que el usuario abrio de nuevo durante los 900ms).
+const idGuardado=tplEditId;
+setTimeout(()=>{if(tplEditId===idGuardado)edClose()},900);
+}catch(e){
+msg.textContent='Error: '+e.message;
+msg.className='ed-msg err';
+log('Guardar plantilla: '+e.message,'err');
+document.getElementById('ed-save').disabled=false;
+}
+}
+// --- Secuencia Veyra MRI Outbound 30d ---
+let seqData=null;
+async function loadSequenceStatus(){
+try{
+const r=await fetch(API+'/sequence-status',{cache:'no-store'});
+if(!r.ok)throw new Error('HTTP '+r.status);
+const d=await r.json();
+if(d.error){document.getElementById('seq-body').innerHTML='<div class="card-sub">Error: '+esc(d.error)+'</div>';log('Secuencia: '+d.error,'err');return}
+seqData=d;
+renderSequence();
+}catch(e){document.getElementById('seq-body').innerHTML='<div class="card-sub">Error: '+esc(e.message)+'</div>';log('Secuencia: '+e.message,'err')}
+}
+function renderSequence(){
+if(!seqData||!seqData.sequence)return;
+const s=seqData.sequence;
+const steps=seqData.steps||[];
+const st=s.status||'?';
+const pill=document.getElementById('seq-pill');
+pill.textContent=st;
+pill.className='pill '+(st==='ACTIVE'?'on':st==='PAUSED'?'warn':'off');
+// "Dia N" acumulado: cada paso suma su propio wait_interval al contador
+// (paso 1 en dia 0, luego 3, 7, 10, 14, 18, 24, 30). Si la unidad no es
+// DAY se muestra el intervalo tal cual sin acumular dias.
+let dia=0;
+const filas=steps.map(sp=>{
+const u=String(sp.wait_unit||'DAY').toUpperCase();
+const it=Number(sp.wait_interval)||0;
+dia+=it;
+const cuando=u.startsWith('DAY')?('Día '+dia):(it+' '+u.toLowerCase());
+const subj=sp.template_subject?('“'+esc(sp.template_subject)+'”'):'(sin asunto / sin plantilla enlazada)';
+return`<div class="seq-step"><div class="seq-day">${cuando}</div><div><div class="seq-step-name">Paso ${esc(String(sp.position??'?'))}: ${esc(sp.name||'(sin nombre)')}</div><div class="seq-step-subject">${subj}</div></div></div>`}).join('');
+document.getElementById('seq-body').innerHTML=`<div class="seq-btns">
+<button class="btn btn-sm btn-on" onclick="seqToggle('activate')" ${st==='ACTIVE'?'disabled':''}>▶ Activar</button>
+<button class="btn btn-sm btn-outline" onclick="seqToggle('pause')" ${st==='PAUSED'?'disabled':''}>⏸ Pausar</button>
+<span class="card-sub">${steps.length} pasos · is_active: ${s.is_active?'sí':'no'}</span>
+</div>
+<div class="seq-steps">${filas||'<div class="card-sub">La secuencia no tiene pasos registrados.</div>'}</div>`;
+}
+async function seqToggle(accion){
+if(!seqData||!seqData.sequence)return;
+const id=seqData.sequence.id;
+const nota=document.getElementById('seq-note');
+try{
+const r=await fetch(API+`/sequence/${id}/${accion}`,{method:'POST'});
+const d=await r.json().catch(()=>({}));
+if(!r.ok)throw new Error(d.detail||('HTTP '+r.status));
+if(d.warning){nota.textContent=d.warning;nota.className='seq-note show';log('Secuencia: '+d.warning,'warn')}
+log('Secuencia '+(accion==='activate'?'activada':'pausada'),'ok');
+await loadSequenceStatus();
+}catch(e){log('Secuencia: '+e.message,'err')}
+}
 async function toggleAuto(){
 if(autoT){clearInterval(autoT);autoT=null;document.getElementById('auto-txt').textContent='OFF'}
 else{autoT=setInterval(loadAll,10000);document.getElementById('auto-txt').textContent='ON'}
@@ -318,7 +609,12 @@ else{autoT=setInterval(loadAll,10000);document.getElementById('auto-txt').textCo
 loadAll();
 loadPipeline();
 loadWhatsApp();
+loadTemplates();
+loadSequenceStatus();
 autoT=setInterval(loadAll,10000);
+// Escape cierra SOLO el preview: el editor se cierra por sus botones para
+// no descartar ediciones a medio hacer con una tecla accidental.
+document.addEventListener('keydown',e=>{if(e.key==='Escape')pvClose()});
 </script>
 </body>
 </html>"""
@@ -842,6 +1138,367 @@ async def contact_whatsapp_attempt(
     except Exception as exc:
         logger.error("whatsapp_attempt_error", lead_id=lead_id, error=str(exc))
         raise HTTPException(status_code=500, detail=f"Error registrando intento: {exc}") from exc
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Plantillas de email (email_templates) y secuencia Veyra MRI Outbound
+#
+# La Torre de Control permite revisar y corregir las plantillas que usan el
+# warm-up diario (VeyraWarmupDaily) y la secuencia "Veyra MRI Outbound 30d"
+# sin abrir Supabase. El listado NO incluye body_html/body_text (solo el
+# preview y el editor los traen vía GET /templates/{id}): con 26 plantillas
+# el HTML completo saturaría la respuesta.
+#
+# Los placeholders de personalización son sagrados: el renderizador del
+# warm-up reemplaza [Nombre] y [sector de la empresa] por los datos del
+# contacto. Si una edición los borra, el correo sale genérico; el PATCH
+# valida que no desaparezcan y rechaza con 400 antes de escribir.
+# ──────────────────────────────────────────────────────────────────────────
+
+_PLACEHOLDERS_PERSONALIZACION = ("[Nombre]", "[sector de la empresa]")
+
+# Columnas ligeras para el listado (sin bodies).
+_COLUMNS_LISTADO = "id,name,subject,category,is_active,usage_count,last_used_at"
+
+# Advertencia operativa: activar la secuencia no programa nada por sí sola.
+_ADVERTENCIA_ACTIVACION = (
+    "Activar la secuencia no dispara envíos: el warm-up script "
+    "(VeyraWarmupDaily) es quien envía"
+)
+
+# Id de la secuencia en Supabase. Si se recreara con otro id, el fallback
+# la busca por nombre.
+_SEQUENCE_VEYRA_ID = "47e277e5-682c-4218-ab43-d7e0a0e8d3fb"
+_SEQUENCE_VEYRA_NOMBRE = "Veyra MRI Outbound 30d"
+
+
+def _placeholders_faltantes(original: str, nuevo: str) -> list[str]:
+    """Placeholders de personalización presentes en `original` y ausentes en
+    `nuevo`.
+
+    Comparación exacta (mayúsculas incluidas): el renderizador del warm-up
+    sustituye el token literal, así que "[nombre]" tampoco valdría; si el
+    editor cambia la caja, la validación lo marca igual.
+    """
+    return [
+        token
+        for token in _PLACEHOLDERS_PERSONALIZACION
+        if token in original and token not in nuevo
+    ]
+
+
+class TemplateUpdateIn(BaseModel):
+    """Campos actualizables de una plantilla (PATCH parcial, todos opcionales)."""
+
+    subject: str | None = None
+    body_html: str | None = None
+    body_text: str | None = None
+    is_active: bool | None = None
+
+
+@router.get("/templates")
+async def listar_templates(
+    category: str | None = None, limit: int = 200
+) -> dict[str, Any]:
+    """Listado de plantillas de email SIN el body (solo el preview lo trae).
+
+    Devuelve las columnas ligeras para la card "Plantillas": name, subject,
+    category, is_active, usage_count y last_used_at. Con 26 plantillas el
+    dashboard pide la lista completa de una vez y filtra por categoría en
+    cliente; el parámetro ?category= queda disponible para uso de la API.
+    También devuelve la lista de categorías distintas para el filtro.
+    """
+    from app.core.supabase_http import select as pg_select
+
+    salida: dict[str, Any] = {"templates": [], "total": 0, "categories": []}
+    try:
+        filtros = {"category": category} if category else None
+        filas = await pg_select(
+            "email_templates",
+            columns=_COLUMNS_LISTADO,
+            filters=filtros,
+            order="category.asc,name.asc",
+            limit=limit,
+        )
+        # Categorías distintas (una sola lectura ligera) para el <select>.
+        categorias = await pg_select("email_templates", columns="category", limit=500)
+        unicas = sorted({str(c.get("category") or "Sin categoría") for c in categorias})
+        salida["templates"] = filas
+        salida["total"] = len(filas)
+        salida["categories"] = unicas
+    except Exception as exc:
+        logger.error("templates_list_error", error=str(exc))
+        salida["error"] = str(exc)
+    return salida
+
+
+@router.get("/templates/{template_id}")
+async def obtener_template(template_id: str) -> dict[str, Any]:
+    """Plantilla completa (body_html y body_text) para el preview/editor."""
+    from app.core.supabase_http import select as pg_select
+
+    try:
+        filas = await pg_select(
+            "email_templates",
+            columns="id,name,subject,body_html,body_text,category,is_active,usage_count,last_used_at",
+            filters={"id": template_id},
+            limit=1,
+        )
+    except Exception as exc:
+        logger.error("templates_get_error", template_id=template_id, error=str(exc))
+        raise HTTPException(
+            status_code=502, detail=f"Error leyendo la plantilla: {exc}"
+        ) from exc
+
+    if not filas:
+        # select() devuelve [] tanto si la fila no existe como si PostgREST
+        # falló (ya quedó registrado en el log): el 404 lo deja claro.
+        raise HTTPException(
+            status_code=404,
+            detail=f"Plantilla {template_id} no encontrada (o PostgREST no respondió; revisar logs)",
+        )
+    return {"template": filas[0]}
+
+
+@router.patch("/templates/{template_id}")
+async def actualizar_template(
+    template_id: str, payload: TemplateUpdateIn
+) -> dict[str, Any]:
+    """Actualiza subject/body_html/body_text/is_active de una plantilla.
+
+    Protección del personalizador del warm-up: si el body original usa
+    [Nombre] y/o [sector de la empresa] y la edición los borra (aunque sea
+    cambiando la caja), se rechaza con 400 y mensaje claro, sin tocar
+    Supabase. Cada campo se valida por separado: una plantilla puede tener
+    el token solo en body_html o solo en body_text.
+    """
+    from app.core.supabase_http import select as pg_select, update as pg_update
+
+    try:
+        actuales = await pg_select(
+            "email_templates",
+            columns="id,name,subject,body_html,body_text,category,is_active",
+            filters={"id": template_id},
+            limit=1,
+        )
+        if not actuales:
+            raise HTTPException(
+                status_code=404, detail=f"Plantilla {template_id} no encontrada"
+            )
+
+        # Solo los campos que el cliente envió (PATCH parcial real).
+        cambios = payload.model_dump(exclude_unset=True)
+        if not cambios:
+            raise HTTPException(
+                status_code=422,
+                detail="Sin cambios: envía subject, body_html, body_text o is_active",
+            )
+
+        # Guardas de contenido: un vacío accidental rompería el envío.
+        if cambios.get("subject") is not None and not cambios["subject"].strip():
+            raise HTTPException(status_code=400, detail="El asunto no puede quedar vacío")
+        if cambios.get("body_html") is not None and not cambios["body_html"].strip():
+            raise HTTPException(
+                status_code=400, detail="body_html no puede quedar vacío"
+            )
+
+        original = actuales[0]
+        for campo in ("body_html", "body_text"):
+            if campo not in cambios:
+                continue
+            faltantes = _placeholders_faltantes(
+                original.get(campo) or "", cambios[campo] or ""
+            )
+            if faltantes:
+                tokens = " y ".join(f"'{t}'" for t in faltantes)
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"La plantilla original usa {tokens} en {campo} y la edición "
+                        "los borró. Restáuralos tal cual: el personalizador del "
+                        "warm-up reemplaza esos tokens por el nombre del contacto "
+                        "y el sector de su empresa."
+                    ),
+                )
+
+        actualizadas = await pg_update("email_templates", {"id": template_id}, cambios)
+        if not actualizadas:
+            logger.error(
+                "templates_update_failed",
+                template_id=template_id,
+                campos=list(cambios),
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="Supabase no devolvió la fila actualizada (revisar logs de PostgREST)",
+            )
+
+        logger.info(
+            "templates_updated",
+            template_id=template_id,
+            nombre=original.get("name"),
+            campos=list(cambios),
+        )
+        return {"template": actualizadas[0], "updated_fields": list(cambios)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("templates_update_error", template_id=template_id, error=str(exc))
+        raise HTTPException(
+            status_code=500, detail=f"Error actualizando plantilla: {exc}"
+        ) from exc
+
+
+@router.get("/sequence-status")
+async def estado_secuencia() -> dict[str, Any]:
+    """Estado de la secuencia "Veyra MRI Outbound 30d" con sus 8 pasos.
+
+    Se busca primero por id fijo y, si no existe (p. ej. fue recreada), por
+    nombre. Los pasos vienen de sequence_steps ordenados por position; el
+    asunto de la plantilla enlazada a cada paso se resuelve con una sola
+    lectura de email_templates y un mapa en memoria (más robusto que el
+    resource embedding de PostgREST, que depende del nombre de la FK).
+    """
+    from app.core.supabase_http import select as pg_select
+
+    salida: dict[str, Any] = {"sequence": None, "steps": [], "total_steps": 0}
+    try:
+        seqs = await pg_select(
+            "sequences",
+            columns="id,name,description,status,total_steps,is_active",
+            filters={"id": _SEQUENCE_VEYRA_ID},
+            limit=1,
+        )
+        if not seqs:
+            seqs = await pg_select(
+                "sequences",
+                columns="id,name,description,status,total_steps,is_active",
+                filters={"name": _SEQUENCE_VEYRA_NOMBRE},
+                limit=1,
+            )
+        if not seqs:
+            salida["error"] = (
+                f"No se encontró la secuencia '{_SEQUENCE_VEYRA_NOMBRE}' "
+                f"(id {_SEQUENCE_VEYRA_ID}) en Supabase"
+            )
+            return salida
+
+        seq = seqs[0]
+        pasos = await pg_select(
+            "sequence_steps",
+            columns="id,position,name,wait_interval,wait_unit,email_template_id",
+            filters={"sequence_id": seq["id"]},
+            order="position.asc",
+            limit=50,
+        )
+
+        ids = {p.get("email_template_id") for p in pasos if p.get("email_template_id")}
+        asuntos: dict[str, str] = {}
+        if ids:
+            plantillas = await pg_select(
+                "email_templates", columns="id,subject", limit=500
+            )
+            asuntos = {
+                p["id"]: p.get("subject") or ""
+                for p in plantillas
+                if p.get("id") in ids
+            }
+
+        salida["sequence"] = seq
+        salida["steps"] = [
+            {
+                "position": p.get("position"),
+                "name": p.get("name"),
+                "wait_interval": p.get("wait_interval"),
+                "wait_unit": p.get("wait_unit"),
+                "email_template_id": p.get("email_template_id"),
+                "template_subject": asuntos.get(p.get("email_template_id")),
+            }
+            for p in pasos
+        ]
+        salida["total_steps"] = seq.get("total_steps") or len(pasos)
+    except Exception as exc:
+        logger.error("sequence_status_error", error=str(exc))
+        salida["error"] = str(exc)
+    return salida
+
+
+async def _cambiar_estado_secuencia(
+    sequence_id: str, nuevo_estado: str
+) -> dict[str, Any]:
+    """Cambia el status de una secuencia (ACTIVE/PAUSED) vía PostgREST.
+
+    Solo toca la columna `status`: no encola envíos ni jobs (no existe aún
+    un worker de secuencia) y no muta `is_active` para no pisar el flag que
+    otras piezas puedan estar leyendo. Operación idempotente: si ya está en
+    el estado pedido no se escribe.
+    """
+    from app.core.supabase_http import select as pg_select, update as pg_update
+
+    try:
+        seqs = await pg_select(
+            "sequences",
+            columns="id,name,status,total_steps,is_active",
+            filters={"id": sequence_id},
+            limit=1,
+        )
+        if not seqs:
+            raise HTTPException(
+                status_code=404, detail=f"Secuencia {sequence_id} no encontrada"
+            )
+
+        if seqs[0].get("status") == nuevo_estado:
+            respuesta: dict[str, Any] = {"sequence": seqs[0], "changed": False}
+            if nuevo_estado == "ACTIVE":
+                respuesta["warning"] = _ADVERTENCIA_ACTIVACION
+            return respuesta
+
+        actualizadas = await pg_update(
+            "sequences", {"id": sequence_id}, {"status": nuevo_estado}
+        )
+        if not actualizadas:
+            logger.error(
+                "sequence_status_update_failed",
+                sequence_id=sequence_id,
+                estado=nuevo_estado,
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="Supabase no confirmó el cambio de estado (revisar logs de PostgREST)",
+            )
+
+        logger.info(
+            "sequence_status_changed",
+            sequence_id=sequence_id,
+            nombre=seqs[0].get("name"),
+            estado=nuevo_estado,
+        )
+        respuesta = {"sequence": actualizadas[0], "changed": True}
+        if nuevo_estado == "ACTIVE":
+            respuesta["warning"] = _ADVERTENCIA_ACTIVACION
+        return respuesta
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "sequence_state_error", sequence_id=sequence_id, error=str(exc)
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error cambiando estado de la secuencia: {exc}",
+        ) from exc
+
+
+@router.post("/sequence/{sequence_id}/activate")
+async def activar_secuencia(sequence_id: str) -> dict[str, Any]:
+    """Pone la secuencia en ACTIVE (no dispara envíos: ver `warning`)."""
+    return await _cambiar_estado_secuencia(sequence_id, "ACTIVE")
+
+
+@router.post("/sequence/{sequence_id}/pause")
+async def pausar_secuencia(sequence_id: str) -> dict[str, Any]:
+    """Pone la secuencia en PAUSED (sus steps dejan de considerarse activos)."""
+    return await _cambiar_estado_secuencia(sequence_id, "PAUSED")
 
 
 # ──────────────────────────────────────────────────────────────────────────
