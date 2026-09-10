@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veyra Soluciones — Manual de Operación</title>
+<style>
+:root{--bg:#0a0a0a;--card:#111;--border:#1a1a1a;--fg:#e0e0e0;--muted:#666;--soft:#9a9a9a;--accent:#ff6b35;--green:#00c853;--yellow:#ffd600;--blue:#2979ff;--red:#ff1744}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;background:var(--bg);color:var(--fg);line-height:1.6;font-size:14px;min-height:100vh}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:1080px;margin:0 auto;padding:24px 16px 40px}
+/* --- Encabezado --- */
+.hero{padding:34px 0 22px}
+.hero h1{font-size:26px;font-weight:700;letter-spacing:.3px}
+.hero .logo{color:var(--accent)}
+.hero .gen{color:var(--muted);font-size:11px;margin-top:10px;text-transform:uppercase;letter-spacing:2px}
+/* --- Índice sticky --- */
+.nav{position:sticky;top:0;z-index:20;background:rgba(10,10,10,.94);border-bottom:1px solid var(--border);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.nav-in{max-width:1080px;margin:0 auto;display:flex;gap:8px;padding:10px 16px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.nav-in::-webkit-scrollbar{display:none}
+.nav a{flex:none;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);border:1px solid var(--border);border-radius:20px;padding:6px 12px;transition:color .2s,border-color .2s}
+.nav a:hover{color:var(--accent);border-color:var(--accent);text-decoration:none}
+/* --- Secciones --- */
+.sec{margin-top:52px;scroll-margin-top:64px}
+.sec-head{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:18px}
+.sec-num{font-family:'SF Mono','Fira Code',monospace;color:var(--accent);font-weight:700;font-size:12px;border:1px solid var(--accent);border-radius:8px;padding:2px 8px;flex:none}
+.sec-head h2{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:2px}
+.sec-intro{color:var(--soft);font-size:13px;margin:-8px 0 18px}
+/* --- Cards y grids --- */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:16px}
+.grid-wide{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;transition:border-color .2s}
+.card:hover{border-color:#2a2a2a}
+.card-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+.card h3{font-size:16px;font-weight:700;margin-bottom:8px}
+.card p{color:var(--soft);font-size:13px}
+.card p + p{margin-top:8px}
+.kpi{font-size:30px;font-weight:700;letter-spacing:.5px}
+.kpi small{font-size:12px;color:var(--muted);font-weight:600}
+/* --- Listas con marcador visual --- */
+ul.list{list-style:none;display:flex;flex-direction:column;gap:9px}
+ul.list li{color:var(--soft);font-size:13px;padding-left:16px;position:relative}
+ul.list li::before{content:'';position:absolute;left:0;top:8px;width:6px;height:6px;border-radius:2px;background:var(--accent)}
+ul.list li strong{color:var(--fg);font-weight:600}
+ul.list li code{color:var(--yellow)}
+/* --- Pills de estado --- */
+.pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;white-space:nowrap}
+.pill.g{background:rgba(0,200,83,.12);color:var(--green);border:1px solid var(--green)}
+.pill.y{background:rgba(255,214,0,.12);color:var(--yellow);border:1px solid var(--yellow)}
+.pill.b{background:rgba(41,121,255,.12);color:var(--blue);border:1px solid var(--blue)}
+.pill.o{background:rgba(255,107,53,.12);color:var(--accent);border:1px solid var(--accent)}
+.pill.r{background:rgba(255,23,68,.12);color:var(--red);border:1px solid var(--red)}
+/* --- Tablas --- */
+.tbl-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.tbl-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:620px}
+th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:13px;vertical-align:top}
+th{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px;background:#0d0d0d;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td .sys{font-weight:700;font-size:13px;white-space:nowrap}
+td .desc{color:var(--soft);font-size:12px;display:block;margin-top:2px}
+td a{word-break:break-all}
+/* --- Código / CLI --- */
+.cli{display:block;background:#000;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:'SF Mono','Fira Code',monospace;font-size:12px;color:var(--green);overflow-x:auto;white-space:pre;margin-top:12px}
+.cli .lbl{display:block;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-weight:600}
+.code-inline{font-family:'SF Mono','Fira Code',monospace;font-size:12px;background:#000;border:1px solid var(--border);border-radius:5px;padding:1px 6px;color:var(--yellow);word-break:break-all}
+/* --- Notas / advertencias --- */
+.note{background:rgba(255,214,0,.06);border:1px solid rgba(255,214,0,.35);border-radius:12px;padding:14px 16px;font-size:12.5px;color:var(--yellow);margin-top:16px}
+.note strong{color:var(--yellow)}
+.note.blue{background:rgba(41,121,255,.06);border-color:rgba(41,121,255,.4);color:var(--blue)}
+.note.blue strong{color:var(--blue)}
+.note.red{background:rgba(255,23,68,.06);border-color:rgba(255,23,68,.4);color:var(--red)}
+.note.red strong{color:var(--red)}
+/* --- Pasos numerados --- */
+ol.steps{list-style:none;counter-reset:st;display:flex;flex-direction:column;gap:10px;margin-top:4px}
+ol.steps li{counter-increment:st;display:flex;gap:12px;align-items:flex-start;color:var(--soft);font-size:13px}
+ol.steps li::before{content:counter(st,decimal-leading-zero);flex:none;font-family:'SF Mono','Fira Code',monospace;font-size:10px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:2px 7px;margin-top:2px}
+ol.steps li strong{color:var(--fg);font-weight:600}
+/* --- Commits --- */
+.commit{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)}
+.commit:last-child{border-bottom:none}
+.hash{flex:none;font-family:'SF Mono','Fira Code',monospace;font-size:12px;font-weight:700;color:var(--green);background:#000;border:1px solid var(--border);border-radius:6px;padding:2px 8px;min-width:76px;text-align:center}
+.commit .msg{color:var(--soft);font-size:13px;padding-top:1px}
+.commit .msg .sep{color:var(--muted)}
+/* --- Phases --- */
+.phase{display:flex;gap:14px;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.phase:last-child{border-bottom:none}
+.phase .ph-id{flex:none;font-family:'SF Mono','Fira Code',monospace;font-size:13px;font-weight:700;color:var(--fg);min-width:34px;padding-top:2px}
+.phase .ph-body{flex:1;min-width:220px}
+.phase .ph-name{font-weight:600;font-size:14px}
+.phase .ph-sub{color:var(--soft);font-size:12px;margin-top:2px}
+.phase .pill{margin-top:1px}
+/* --- Assets (rutas de disco) --- */
+.asset{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:16px 18px}
+.asset .path{font-family:'SF Mono','Fira Code',monospace;font-size:12px;color:var(--blue);word-break:break-all;display:block;margin-bottom:6px}
+.asset .what{color:var(--soft);font-size:12.5px}
+.asset .what strong{color:var(--fg)}
+/* --- Pendientes de Edwin --- */
+.todo{border-left:3px solid var(--accent);background:var(--card);border-radius:0 12px 12px 0;padding:16px 18px}
+.todo h3{font-size:14px;font-weight:700;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.todo h3 .n{color:var(--accent);font-family:'SF Mono','Fira Code',monospace}
+.todo p{color:var(--soft);font-size:13px;margin-top:6px}
+/* --- Pie --- */
+footer{border-top:1px solid var(--border);margin-top:64px;padding:26px 16px;text-align:center;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:2px}
+footer .f-accent{color:var(--accent)}
+/* --- Móvil --- */
+@media(max-width:640px){
+  .hero h1{font-size:20px}
+  .hero{padding:24px 0 16px}
+  .wrap{padding:12px 12px 48px}
+  th,td{padding:10px 12px}
+  .sec{margin-top:40px}
+  .kpi{font-size:26px}
+}
+</style>
+</head>
+<body>
+
+<header class="wrap hero">
+  <h1><span class="logo">Veyra Soluciones</span> — Manual de Operación</h1>
+  <p class="gen">Generado 2026-09-09 · Ecosistema Mapache + Veyra + Guaki + Hermes · Operador: Edwin</p>
+</header>
+
+<nav class="nav" aria-label="Índice del manual">
+  <div class="nav-in">
+    <a href="#s1">01 La Meta</a>
+    <a href="#s2">02 Sistemas en Producción</a>
+    <a href="#s3">03 Flujos Automáticos</a>
+    <a href="#s4">04 Torre de Control</a>
+    <a href="#s5">05 Reglas Duras</a>
+    <a href="#s6">06 Pendientes de Edwin</a>
+    <a href="#s7">07 Mapa de Assets</a>
+    <a href="#s8">08 Historial de Sesión</a>
+    <a href="#s9">09 Phases del Plan</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <!-- ────────────────────────── SECCIÓN 1: LA META ────────────────────────── -->
+  <section class="sec" id="s1">
+    <div class="sec-head"><span class="sec-num">01</span><h2>La Meta</h2></div>
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">Meta final</div>
+        <h3>Ofrecer servicios y facturar</h3>
+        <p>Todo el ecosistema existe para una sola cosa: tener servicios claros, visibles y con canal de contacto funcionando, para cerrar ventas y cobrar.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Oferta Veyra — Servicio principal</div>
+        <h3>Business MRI — USD $2.850</h3>
+        <ul class="list">
+          <li>Pago <strong>50/50</strong> (mitad al iniciar, mitad al entregar)</li>
+          <li>SLA de entrega: <strong>14 días</strong></li>
+          <li>Capacidad: <strong>3 cupos por mes</strong></li>
+          <li><strong>7 entregables</strong> definidos</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Oferta Veyra — Retenedor mensual</div>
+        <h3>VEYRA Care — USD $650/mes</h3>
+        <p>Plan recurrente que acompaña al MRI. Página de venta propia: <a href="https://veyrasoluciones.com/veyra-care" target="_blank" rel="noopener">veyrasoluciones.com/veyra-care</a></p>
+      </div>
+      <div class="card">
+        <div class="card-title">Cliente ideal (ICP)</div>
+        <h3>PYME / Mid-Market LATAM</h3>
+        <p>Empresas de <strong>10 a 150 empleados</strong> en América Latina: sufren procesos manuales de contacto, agenda y respuesta a clientes, y tienen presupuesto para resolverlo.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Estado del sistema</div>
+        <h3>Reconstrucción completa <span class="code-inline">→</span> Operando</h3>
+        <p><span class="pill g">Operando</span> La fase de reconstrucción terminó: scraping, CRM, sitio, email y schedulers están corriendo. Lo que queda es operar y vender.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────── SECCIÓN 2: SISTEMAS EN PRODUCCIÓN ─────────────────── -->
+  <section class="sec" id="s2">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Sistemas en Producción</h2></div>
+    <p class="sec-intro">Lo que está vivo hoy en internet. Todos los enlaces abren en pestaña nueva.</p>
+    <div class="tbl-card">
+      <div class="tbl-scroll">
+        <table>
+          <thead>
+            <tr><th>Sistema</th><th>URL</th><th>Qué es</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="sys">Torre de Control</span></td>
+              <td><a href="https://mapache-kappa.vercel.app/torre-control" target="_blank" rel="noopener">https://mapache-kappa.vercel.app/torre-control</a></td>
+              <td><span class="desc">HQ operativo: salud de servicios, pipeline, WhatsApp manual, plantillas y secuencia.</span></td>
+            </tr>
+            <tr>
+              <td><span class="sys">Sitio público</span></td>
+              <td><a href="https://veyrasoluciones.com" target="_blank" rel="noopener">https://veyrasoluciones.com</a></td>
+              <td><span class="desc">Capturando leads: el formulario cae directo al CRM (verificado).</span></td>
+            </tr>
+            <tr>
+              <td><span class="sys">Oferta MRI</span></td>
+              <td><a href="https://veyrasoluciones.com/business-mri.html" target="_blank" rel="noopener">https://veyrasoluciones.com/business-mri.html</a></td>
+              <td><span class="desc">Página de la oferta Business MRI (USD $2.850).</span></td>
+            </tr>
+            <tr>
+              <td><span class="sys">VEYRA Care</span></td>
+              <td><a href="https://veyrasoluciones.com/veyra-care" target="_blank" rel="noopener">https://veyrasoluciones.com/veyra-care</a></td>
+              <td><span class="desc">Página de la oferta VEYRA Care (USD $650/mes).</span></td>
+            </tr>
+            <tr>
+              <td><span class="sys">Health API</span></td>
+              <td><a href="https://mapache-kappa.vercel.app/health" target="_blank" rel="noopener">https://mapache-kappa.vercel.app/health</a></td>
+              <td><span class="desc">Endpoint de salud del backend Mapache CRM.</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="grid" style="margin-top:16px">
+      <div class="card">
+        <div class="card-title">CRM — Volumen total</div>
+        <div class="kpi">9.693 <small>companies</small></div>
+      </div>
+      <div class="card">
+        <div class="card-title">CRM — Contactos</div>
+        <div class="kpi">3.553 <small>contacts</small></div>
+      </div>
+      <div class="card">
+        <div class="card-title">CRM — Leads</div>
+        <div class="kpi">932 <small>leads</small></div>
+        <p style="margin-top:8px"><span class="pill g">75 CONTACTED</span> <span class="pill b">857 NEW</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────── SECCIÓN 3: FLUJOS AUTOMÁTICOS ─────────────────── -->
+  <section class="sec" id="s3">
+    <div class="sec-head"><span class="sec-num">03</span><h2>Los Flujos Automáticos</h2></div>
+    <p class="sec-intro">Cuatro máquinas corriendo sin que Edwin tenga que tocar nada. Cada card explica qué hace, cómo está montado y su comando manual.</p>
+
+    <div class="grid-wide">
+
+      <div class="card">
+        <div class="card-title"><span class="pill o">Flujo A</span> Scheduler local — scraping cada 30 min</div>
+        <h3>Descubrimiento de negocios</h3>
+        <ul class="list">
+          <li><strong>Queries randomizadas:</strong> 2 queries por ciclo, tomadas de 7 semillas, en verticales <code>veyra</code> y <code>guaki</code>.</li>
+          <li><strong>Dedupe honesto:</strong> upsert con <code>on_conflict</code> sobre <code>owner_id + dedupe_key</code>; el contador de duplicados reporta bien (no infla cifras).</li>
+          <li><strong>Enriquecimiento:</strong> 3 fichas por query (~12 segundos cada una) que traen teléfono en formato E.164 y website.</li>
+          <li><strong>Task Scheduler de Windows:</strong> tarea <code>MapacheScraplingScheduler</code> cada 30 minutos, Last Result 0 (sin errores).</li>
+        </ul>
+        <code class="cli"><span class="lbl">CLI manual</span>python app/scheduler_local.py --once | --all-queries | --vertical guaki</code>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="pill o">Flujo B</span> Warm-up de emails — 14 días</div>
+        <h3>Rampa de envío total: 325 correos</h3>
+        <ul class="list">
+          <li><strong>Día 1 completado:</strong> 3 enviados (1 de control + 2 a leads reales) — delivered verificado.</li>
+          <li><strong>Tarea programada:</strong> <code>VeyraWarmupDaily</code> a las <strong>9:05 AM</strong> (habilitada).</li>
+          <li><strong>Email 1:</strong> «¿Te escribo o prefieres que no?» — pide permiso, no vende.</li>
+          <li><strong>Estados:</strong> <code>SENT</code> es permanente; <code>FAILED</code> reintenta el mismo día; nunca reenvía un correo ya enviado.</li>
+        </ul>
+        <div class="tbl-scroll" style="margin-top:12px">
+          <table style="min-width:0">
+            <thead><tr><th>Días</th><th>Envíos/día</th></tr></thead>
+            <tbody>
+              <tr><td>1 – 2</td><td>5</td></tr>
+              <tr><td>3 – 5</td><td>10</td></tr>
+              <tr><td>6 – 9</td><td>20</td></tr>
+              <tr><td>10 – 12</td><td>35</td></tr>
+              <tr><td>13 – 14</td><td>50</td></tr>
+              <tr><td><strong>Total</strong></td><td><strong>325</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <code class="cli"><span class="lbl">CLI manual</span>python scripts/warmup_resend.py --plan | --status | --send</code>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="pill o">Flujo C</span> Crons Hermes</div>
+        <h3>Primera corrida re-pineada: mañana 2026-09-10</h3>
+        <ul class="list">
+          <li><strong>08:00</strong> — <code>mapachecrm-daily-scoring</code> (scoring de leads)</li>
+          <li><strong>10:00</strong> — <code>mapachecrm-followup-am</code> (cola de contactos)</li>
+          <li><strong>15:00</strong> — <code>mapachecrm-followup-pm</code> (cola de contactos)</li>
+          <li><strong>Lunes 08:00</strong> — <code>weekly-report</code> (funciona desde siempre)</li>
+          <li><strong>Provider:</strong> <code>tokenrouter / z-ai/glm-5.3-free</code></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="pill o">Flujo D</span> Sitio web → CRM</div>
+        <h3>Del formulario al CRM sin manos</h3>
+        <ul class="list">
+          <li>Form del home + <code>/business-mri</code> → <code>POST /api/veyra/intake</code> → CRM vía <code>/torre-control/intake</code>.</li>
+          <li><strong>companies</strong>: dedupe con sha256 del email (el mismo prospecto nunca duplica ficha).</li>
+          <li><strong>contacts</strong>: con <code>source=WEBSITE</code>.</li>
+          <li><strong>leads</strong>: creados en stage <code>NEW</code>.</li>
+          <li><strong>tasks</strong>: tarea <code>"Intake Review"</code> para revisar y clasificar.</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─────────────── SECCIÓN 4: CÓMO USAR LA TORRE DE CONTROL ─────────────────── -->
+  <section class="sec" id="s4">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Cómo Usar la Torre de Control</h2></div>
+    <p class="sec-intro">Guía de la UI de <a href="https://mapache-kappa.vercel.app/torre-control" target="_blank" rel="noopener">mapache-kappa.vercel.app/torre-control</a>. Cada card del dashboard y para qué sirve.</p>
+    <div class="grid-wide">
+
+      <div class="card">
+        <div class="card-title">Card</div>
+        <h3>Servicios</h3>
+        <p>Salud de los <strong>4 servicios</strong>: Base de Datos (Supabase/PostgREST), Email (Resend), Scraper/Scheduler y API. Verde = operativo, amarillo = atención, rojo = error.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Card</div>
+        <h3>Métricas</h3>
+        <p>Conteos reales de la base: empresas, contactos, emails enviados y jobs activos (conteo exacto, no aproximado).</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Card</div>
+        <h3>Pipeline</h3>
+        <p>Estado del embudo de scraping: <strong>empresas</strong> totales y enriquecidas, <strong>leads</strong> activos y los <strong>runs</strong> recientes del scheduler (query, resultado, duplicados).</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Card</div>
+        <h3>Contacto WhatsApp Manual</h3>
+        <p>El flujo completo para escribirle a un lead a mano, paso a paso:</p>
+        <ol class="steps">
+          <li><strong>Seleccionar lead</strong> en la lista de contactables (tiene teléfono válido).</li>
+          <li><strong>Generar copys</strong> con el botón: crea 2 variantes humanizadas con los datos reales de la ficha.</li>
+          <li><strong>Editar en el textarea</strong> lo que quieras cambiar antes de enviar.</li>
+          <li><strong>Abrir WhatsApp</strong> — usa el texto editado, precargado en el chat (wa.me).</li>
+          <li><strong>Marcar contactado</strong> para registrar el intento en el CRM.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Card</div>
+        <h3>Plantillas</h3>
+        <p><strong>Ver / editar</strong> cada plantilla con preview seguro (iframe sin scripts) y validación de placeholders: no deja borrar <code>[Nombre]</code> ni <code>[sector de la empresa]</code>, que el personalizador del warm-up reemplaza por los datos del contacto.</p>
+        <p style="margin-top:8px">También permite <strong>activar / pausar la secuencia</strong> Veyra MRI Outbound 30d, siempre con advertencia visible.</p>
+      </div>
+
+    </div>
+    <div class="note"><strong>Importante:</strong> activar la secuencia NO dispara envíos — quien envía es el warm-up (VeyraWarmupDaily). La secuencia solo define el orden y los tiempos.</div>
+  </section>
+
+  <!-- ────────────────────────── SECCIÓN 5: REGLAS DURAS ────────────────────────── -->
+  <section class="sec" id="s5">
+    <div class="sec-head"><span class="sec-num">05</span><h2>Reglas Duras (vigentes)</h2></div>
+    <p class="sec-intro">Estas reglas no se discuten ni se relajan por prisa. Cualquier automatización nueva debe respetarlas.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">Regla 1 — Anti-ban WhatsApp</div>
+        <h3>Sin opt-in, solo email</h3>
+        <p>Leads sin opt-in <strong>→ SOLO email</strong>. WhatsApp únicamente con opt-in o respuesta previa. Protege el número principal del ban.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Regla 2</div>
+        <h3>7 leads con <code class="code-inline">whatsapp_usado</code></h3>
+        <p>Esos 7 leads <strong>NO se recontactan en frío</strong>. Ya tienen historial: solo se retoma si hay respuesta.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Regla 3</div>
+        <h3>Cero cifras inventadas</h3>
+        <p>Toda cifra que se le muestre a un cliente o se publique lleva <strong>fuente + URL + año</strong>. Si no tiene las tres, no se usa.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Regla 4</div>
+        <h3>Pricing fijo, no renegociable</h3>
+        <p>Business MRI USD $2.850 y VEYRA Care USD $650/mes. Sin descuentos "especiales" ni excepciones ad-hoc.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Regla 5 — Posicionamiento</div>
+        <h3>Lo que se dice y lo que no</h3>
+        <p>SÍ: <strong>"respuesta inmediata 24/7 con escalado a humano"</strong>. NUNCA: "IA que vende sola". El humano siempre está en el loop.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────── SECCIÓN 6: PENDIENTES DE EDWIN ─────────────────────── -->
+  <section class="sec" id="s6">
+    <div class="sec-head"><span class="sec-num">06</span><h2>Pendientes de Edwin (solo humano)</h2></div>
+    <p class="sec-intro">Cosas que requieren una persona: identidad legal, bancario y credenciales. El sistema no puede hacerlas.</p>
+    <div class="grid-wide">
+      <div class="todo">
+        <h3><span class="n">01</span> ePayco KYC con PPT <span class="pill o">bloqueante para cobrar</span></h3>
+        <p>Registro en ePayco y abrir ticket de soporte con el PPT. Mientras se resuelve, cobrar por <strong>transferencia / Nequi</strong>.</p>
+      </div>
+      <div class="todo">
+        <h3><span class="n">02</span> RUT + DIAN + cuenta bancaria <span class="pill o">legal / fiscal</span></h3>
+        <p>RUT activo, resolución DIAN para facturación electrónica y cuenta bancaria lista para recibir pagos.</p>
+      </div>
+      <div class="todo">
+        <h3><span class="n">03</span> WhatsApp QR re-pareo <span class="pill y">opcional</span></h3>
+        <p>Ejecutar <code class="code-inline">hermes whatsapp</code> y escanear el QR con el número <strong>+57 320 488 9616</strong>.</p>
+      </div>
+      <div class="todo">
+        <h3><span class="n">04</span> Rotar RESEND_API_KEY <span class="pill y">opcional</span></h3>
+        <p>Si la considera expuesta, rotarla desde el panel de Resend y actualizar el .env / variables.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ────────────────────────── SECCIÓN 7: MAPA DE ASSETS ────────────────────────── -->
+  <section class="sec" id="s7">
+    <div class="sec-head"><span class="sec-num">07</span><h2>Mapa de Assets</h2></div>
+    <p class="sec-intro">Dónde vive cada cosa. Rutas locales de disco (Windows) y carpetas activas.</p>
+    <div class="grid-wide">
+      <div class="asset">
+        <span class="path">D:\Proyectos IA\03_DATOS\CRM_DATASETS\LEADS_UNIFICADOS_20260831.csv</span>
+        <p class="what"><strong>Dataset maestro de leads</strong> — 8.738 leads de origen, unificados.</p>
+      </div>
+      <div class="asset">
+        <span class="path">D:\Proyectos IA\01_PROYECTOS\VEYRA_OUTREACH\MAQUINA_VENTAS_20260826.md</span>
+        <p class="what"><strong>Oferta + secuencia</strong> — la máquina de ventas completa de Veyra.</p>
+      </div>
+      <div class="asset">
+        <span class="path">D:\Proyectos IA\01_PROYECTOS\CVELIZ\</span>
+        <p class="what"><strong>Negocio CVELIZ completo</strong> — incluye precios COP (kit $12.500).</p>
+      </div>
+      <div class="asset">
+        <span class="path">D:\Proyectos IA\00_NUCLEO\PLAYBOOK_CONEXIONES_WHATSAPP.md</span>
+        <p class="what"><strong>Playbook WhatsApp</strong> — los 12 errores de conexión WhatsApp con sus fixes.</p>
+      </div>
+      <div class="asset">
+        <span class="path">C:\Users\edwin\Documents\Trinidad\</span>
+        <p class="what"><strong>Trinidad actual</strong> — <code>mapache</code>, <code>guaki</code>, <code>veyra-site</code>, <code>MEGA_MASTER_PLAN.md</code>, <code>ACCIONES_EDWIN.md</code>.</p>
+      </div>
+      <div class="asset">
+        <span class="path">%LOCALAPPDATA%\hermes\</span>
+        <p class="what"><strong>Agente Hermes</strong> — <code>config.yaml</code>, <code>cron/jobs.json</code>, skills.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────── SECCIÓN 8: HISTORIAL DE ESTA SESIÓN ─────────────────── -->
+  <section class="sec" id="s8">
+    <div class="sec-head"><span class="sec-num">08</span><h2>Historial de Esta Sesión (commits verificables)</h2></div>
+    <div class="tbl-card" style="padding:8px 18px">
+      <div class="commit"><span class="hash">41fe2f3</span><span class="msg">Scrapling reemplaza google-maps-scraper.exe</span></div>
+      <div class="commit"><span class="hash">a48c2b9</span><span class="msg">Scheduler local Windows → Supabase</span></div>
+      <div class="commit"><span class="hash">f774c90</span><span class="msg">Fallback PostgREST en 4 routers</span></div>
+      <div class="commit"><span class="hash">d30f184</span><span class="msg">Napkin actualizado</span></div>
+      <div class="commit"><span class="hash">385d4e4</span><span class="msg">Fix: scheduler carga .env por ruta absoluta</span></div>
+      <div class="commit"><span class="hash">0cd2bd6</span><span class="msg">Fix: torre de control detecta scheduler vía datos</span></div>
+      <div class="commit"><span class="hash">a43e876</span><span class="msg">Torre de control: pipeline + WhatsApp manual + torre montada en prod</span></div>
+      <div class="commit"><span class="hash">208ad4e</span><span class="msg">CRM: intake público desde el sitio</span></div>
+      <div class="commit"><span class="hash">8d24f35 <span class="sep">+</span> 69b512c</span><span class="msg">Sitio: catálogo reconciliado + /veyra-care + intake → CRM</span></div>
+      <div class="commit"><span class="hash">73e8775</span><span class="msg">Torre: gestión de plantillas y secuencia MRI</span></div>
+    </div>
+  </section>
+
+  <!-- ────────────────────── SECCIÓN 9: PHASES DEL PLAN ────────────────────── -->
+  <section class="sec" id="s9">
+    <div class="sec-head"><span class="sec-num">09</span><h2>Phases del Plan (resumen MEGA_MASTER_PLAN.md)</h2></div>
+    <div class="tbl-card" style="padding:8px 18px">
+      <div class="phase">
+        <span class="ph-id">F0</span>
+        <div class="ph-body">
+          <div class="ph-name">Datos → sistema</div>
+          <div class="ph-sub">Del CSV de leads al CRM operando.</div>
+        </div>
+        <span class="pill g">Hecho</span>
+      </div>
+      <div class="phase">
+        <span class="ph-id">F1</span>
+        <div class="ph-body">
+          <div class="ph-name">Oferta visible</div>
+          <div class="ph-sub">Sitio, MRI y Care publicados. Scorecard parcial.</div>
+        </div>
+        <span class="pill g">Hecho</span>
+      </div>
+      <div class="phase">
+        <span class="ph-id">F2</span>
+        <div class="ph-body">
+          <div class="ph-name">Canal de contacto</div>
+          <div class="ph-sub">En curso: warm-up de emails día 1/14.</div>
+        </div>
+        <span class="pill y">En curso</span>
+      </div>
+      <div class="phase">
+        <span class="ph-id">F3</span>
+        <div class="ph-body">
+          <div class="ph-name">Cobro</div>
+          <div class="ph-sub">Pendiente de Edwin: ePayco KYC + RUT/DIAN + cuenta bancaria.</div>
+        </div>
+        <span class="pill o">Pendiente</span>
+      </div>
+      <div class="phase">
+        <span class="ph-id">F4</span>
+        <div class="ph-body">
+          <div class="ph-name">Operación 24/7</div>
+          <div class="ph-sub">Próxima fase del plan.</div>
+        </div>
+        <span class="pill b">Próxima</span>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  Veyra Soluciones · <span class="f-accent">Manual de Operación del Ecosistema</span> · Generado 2026-09-09 · Datos verificados en sesión de reconstrucción
+</footer>
+
+</body>
+</html>

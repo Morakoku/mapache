@@ -22,6 +22,7 @@ import re
 import threading
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote as url_quote
 
@@ -631,6 +632,54 @@ async def dashboard() -> str:
 @router.get("", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard_sin_slash() -> str:
     return DASHBOARD_HTML
+
+
+# ---------------------------------------------------------------------------
+# Manual de Operación del Ecosistema (ops-manual.html)
+#
+# Página estática autocontenida con el mapa completo del ecosistema: la meta,
+# los sistemas en producción, los flujos automáticos, la guía de la Torre de
+# Control, las reglas duras, los pendientes del operador y el mapa de assets.
+# Vive en backend/static/ (junto a app/) y se lee del disco en cada request:
+# editar el archivo actualiza la página sin tocar código ni redeploys.
+# ---------------------------------------------------------------------------
+_MANUAL_CANDIDATOS = (
+    # Ruta canonical: backend/static/ops-manual.html (este archivo vive en
+    # backend/app/routers/, tres .parent arriba queda backend/).
+    Path(__file__).parent.parent.parent / "static" / "ops-manual.html",
+    # Fallback para runtimes donde el CWD es la raíz del bundle (p. ej.
+    # serverless): mismo archivo relativo al directorio de trabajo.
+    Path.cwd() / "static" / "ops-manual.html",
+)
+
+
+@router.get("/manual", response_class=HTMLResponse, include_in_schema=False)
+async def manual() -> str:
+    """Sirve el Manual de Operación del ecosistema.
+
+    Lee static/ops-manual.html del disco en cada request (el primer candidato
+    que exista gana). Si el archivo no está (deploy sin la carpeta static/ o
+    borrado accidental) responde 404 con mensaje claro, nunca un 500 opaco.
+    """
+    for ruta in _MANUAL_CANDIDATOS:
+        if ruta.is_file():
+            try:
+                return ruta.read_text(encoding="utf-8")
+            except OSError as exc:
+                logger.error("manual_lectura_error", ruta=str(ruta), error=str(exc))
+                raise HTTPException(
+                    status_code=500, detail=f"Error leyendo el manual: {exc}"
+                ) from exc
+    logger.error("manual_no_encontrado", candidatos=[str(r) for r in _MANUAL_CANDIDATOS])
+    raise HTTPException(
+        status_code=404,
+        detail=(
+            "Manual de operación no encontrado: no existe static/ops-manual.html "
+            "en el bundle (candidatos: "
+            + ", ".join(str(r) for r in _MANUAL_CANDIDATOS)
+            + "). Regenera el archivo y redeploya."
+        ),
+    )
 
 
 @router.get("/status")
