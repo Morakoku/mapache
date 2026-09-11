@@ -1,0 +1,15 @@
+# Worker de Mapache CRM: procesa la cola `jobs` (descubrimiento, enriquecimiento,
+# scoring, envio, seguimiento, inbox) contra Supabase. Sin navegador ni scrape.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY pyproject.toml ./
+COPY app ./app
+
+RUN pip install --no-cache-dir .
+
+CMD ["python", "-m", "app.worker_runner"]

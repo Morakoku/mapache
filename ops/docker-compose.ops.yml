@@ -28,8 +28,28 @@ services:
       timeout: 3s
       retries: 5
 
+  worker:
+    # Procesa la cola `jobs` (descubrir, enriquecer, enviar, seguimiento).
+    # Usa la misma base (Supabase) que Appsmith/Metabase.
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.worker
+    container_name: ops-worker
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+      - ./.env.ops
+    environment:
+      ENVIRONMENT: local
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
+
   appsmith:
-    # CRM / panel de operacion. Se conecta a Supabase Postgres desde la UI.
     image: appsmith/appsmith-ce:latest
     container_name: ops-appsmith
     restart: unless-stopped

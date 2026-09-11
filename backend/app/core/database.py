@@ -41,10 +41,20 @@ def get_engine() -> AsyncEngine | None:
         # asyncpg no acepta sslmode en DSN; configurar SSL en connect_args
         connect_args = {
             "server_settings": {"application_name": settings.app_name},
+            # Compatible con poolers tipo pgbouncer/Supavisor (Supabase): sin
+            # cache de sentencias preparadas. Es seguro tambien contra Postgres directo.
+            "statement_cache_size": 0,
         }
-        # Si es producción, forzar SSL
-        if settings.is_production:
-            connect_args["ssl"] = ssl.create_default_context()
+        # Forzar SSL en producción o contra un pooler gestionado (Supabase).
+        _url = settings.sqlalchemy_url or ""
+        if settings.is_production or "supabase.com" in _url:
+            ctx = ssl.create_default_context()
+            if "supabase.com" in _url:
+                # Supavisor presenta su propia cadena; ciframos sin verificar CA
+                # (equivale a libpq sslmode=require). El trafico va cifrado.
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+            connect_args["ssl"] = ctx
         _engine = create_async_engine(
             settings.sqlalchemy_url,
             echo=settings.db_echo,
