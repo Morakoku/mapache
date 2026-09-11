@@ -29,7 +29,6 @@ import asyncio
 import os
 import random
 import sys
-import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -285,7 +284,9 @@ async def run_cycle(
                 if not r.get("name"):
                     continue
                 company = {
-                    "id": str(uuid.uuid4()),
+                    # Sin `id`: en el upsert por (owner_id, dedupe_key) un id nuevo
+                    # reescribiría la PK y rompería la FK de leads. La BD genera el
+                    # id en inserts nuevos y conserva el existente en los merges.
                     "name": r.get("name", ""),
                     "category": r.get("category", "") or None,
                     "categories": [r["category"]] if r.get("category") else [],
@@ -304,7 +305,7 @@ async def run_cycle(
                     res = await _upsert_company(company)
                     if res:
                         ok += 1
-                        saved_ids[r.get("name", "")] = company["id"]
+                        saved_ids[r.get("name", "")] = res[0].get("id")
                     else:
                         fail += 1
                         logger.warning("Supabase insert falló: %s", r.get("name", "?"))
