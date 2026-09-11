@@ -39,7 +39,9 @@ from app.routers import (
     suppression,
     templates,
     torre_control,
+    torre_productos,
     tracking,
+    whatsapp_webhook,
 )
 from app.routers.security_schemes import SERVICE_BEARER
 
@@ -115,4 +117,9 @@ public_router.include_router(scheduler.router, prefix="/scheduler", tags=["sched
 # /torre-control/pipeline, /torre-control/contact-whatsapp*.
 public_router.include_router(torre_control.router, prefix="/torre-control", tags=["torre-control"])
 
+# Sección Veyra: galería de soluciones y fichas en PDF (página + descargas).
+public_router.include_router(torre_productos.router, prefix="/torre-control", tags=["torre-productos"])
+
+# Webhook de WhatsApp Cloud API (Meta). Publico: lo llama Meta, no el frontend.
+public_router.include_router(whatsapp_webhook.router, prefix="/webhook", tags=["whatsapp-cloud"])
 __all__ = ["api_router", "public_router"]

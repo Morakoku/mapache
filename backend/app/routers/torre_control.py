@@ -17,6 +17,7 @@ exime del CSP restrictivo.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import re
 import threading
@@ -33,6 +34,8 @@ from pydantic import BaseModel
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.routers.torre_chequeo_html import CHEQUEO_HTML
+from app.routers.torre_receptionist_html import RECEPTIONIST_HTML
 
 logger = get_logger(__name__)
 
@@ -46,7 +49,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mapache CRM - Torre de Control</title>
 <style>
-:root{--bg:#0a0a0a;--card:#111;--border:#1a1a1a;--fg:#e0e0e0;--muted:#666;--accent:#ff6b35;--green:#00c853;--red:#ff1744;--yellow:#ffd600;--blue:#2979ff}
+:root{--bg:#0a0a0a;--card:#111;--border:#1a1a1a;--fg:#e0e0e0;--muted:#9aa0a6;--accent:#ff6b35;--green:#00c853;--red:#ff1744;--yellow:#ffd600;--blue:#2979ff}
+    :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+    ::selection{background:var(--accent);color:#0a0a0a}
+    html{caret-color:var(--accent)}
+    ::-webkit-scrollbar{width:10px;height:10px}
+    ::-webkit-scrollbar-track{background:#0a0a0a}
+    ::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:6px}
+    ::-webkit-scrollbar-thumb:hover{background:#3a3a3a}
+    @media (prefers-reduced-motion: reduce){*,*::before,*::after{transition-duration:.01ms !important;animation-duration:.01ms !important;animation-iteration-count:1 !important}}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;background:var(--bg);color:var(--fg);min-height:100vh;padding:20px}
 .header{display:flex;align-items:center;justify-content:space-between;padding:20px 0;border-bottom:1px solid var(--border);margin-bottom:30px;flex-wrap:wrap;gap:15px}
@@ -137,11 +148,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 .ed-msg.ok{color:var(--green)}
 .ed-msg.err{color:var(--red)}
 .ed-msg.warn{color:var(--yellow)}
+.tabbar{display:flex;gap:8px;margin:0 0 22px;flex-wrap:wrap;border-bottom:1px solid var(--border)}
+.tab{padding:10px 20px;border:1px solid var(--border);border-bottom:none;border-radius:10px 10px 0 0;background:0 0;color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;cursor:pointer}
+.tab:hover{border-color:var(--accent);color:var(--fg)}
+.tab.active{background:var(--card);color:var(--fg);border-color:var(--accent)}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+.tab-note{color:var(--muted);font-size:12px;margin-bottom:16px}
 </style>
 </head>
 <body>
 <div class="header">
-<h1><span class="logo">🦝</span> Mapache CRM</h1>
+<h1><span class="logo">🦝</span> Torre de Control</h1>
 <div style="display:flex;gap:15px;align-items:center">
 <span id="overall" class="pill off">Verificando...</span>
 <span style="color:var(--muted);font-size:12px" id="updated">--:--:--</span>
@@ -151,9 +169,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 <div style="display:flex;gap:10px">
 <button class="refresh-btn" onclick="loadAll();loadPipeline();loadWhatsApp();loadTemplates();loadSequenceStatus()">🔄 Refrescar</button>
 <button class="refresh-btn" onclick="toggleAuto()">⏱ <span id="auto-txt">ON</span></button>
+<a class="refresh-btn" href="/torre-control/chequeo" style="text-decoration:none;color:var(--accent);border-color:var(--accent)">📋 Chequeo Express</a>
 </div>
 <span style="color:var(--muted);font-size:12px">Cada 10s</span>
 </div>
+<div class="tabbar" role="tablist" aria-label="Secciones de la Torre">
+<button class="tab active" role="tab" aria-selected="true" data-tab="mapache" onclick="showTab('mapache')">Mapache</button>
+<button class="tab" role="tab" aria-selected="false" data-tab="veyra" onclick="showTab('veyra')">Veyra</button>
+<button class="tab" role="tab" aria-selected="false" data-tab="guaki" onclick="showTab('guaki')">Guaki</button>
+</div>
+<div class="tab-panel active" id="tab-mapache" role="tabpanel" aria-hidden="false">
 <div class="grid" id="services"></div>
 <div class="card" style="margin-bottom:30px">
 <div class="card-header"><span class="card-title">📊 Métricas</span></div>
@@ -173,6 +198,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 <div class="card"><div class="card-sub">Leads</div><div class="card-value" id="pl-leads">--</div></div>
 </div>
 <div class="card-sub" style="margin-top:10px">Ultimos runs del scheduler: <span id="pl-runs">--</span></div>
+</div>
+<div class="card">
+<div class="card-header"><span class="card-title">📋 Logs</span><button class="btn btn-blue" onclick="clearLogs()">Limpiar</button></div>
+<div class="logs" id="logs"><div class="log-e"><span class="log-t">--:--:--</span><span class="log-info">Cargando...</span></div></div>
+</div>
+</div>
+
+<div class="tab-panel" id="tab-veyra" role="tabpanel" aria-hidden="true">
+<div class="card" style="margin-bottom:30px">
+<div class="card-header">
+<span class="card-title">📊 Solicitudes del Chequeo Express</span>
+<a class="refresh-btn" href="/torre-control/chequeo" style="text-decoration:none;color:var(--accent);border-color:var(--accent)">Abrir kanban</a>
+</div>
+<div class="card-sub">Diagnóstico por perfil, fuga anualizada, etapas del embudo y contacto directo por WhatsApp. Requiere token de operador.</div>
+</div>
+<div class="card" style="margin-bottom:30px">
+<div class="card-header">
+<span class="card-title">📚 Soluciones Veyra (fichas)</span>
+<a class="refresh-btn" href="/torre-control/productos" style="text-decoration:none;color:var(--accent);border-color:var(--accent)">Abrir</a>
+</div>
+<div class="card-sub">Fichas listas para el cliente (PDF): Recepcionista IA, Agenda IA, Veyra Ops, Copiloto, Puente, Radar y Conecta. Cada una con las dos formas de implementarlo, pros y contras.</div>
+</div>
+<div class="card" style="margin-bottom:30px">
+<div class="card-header">
+<span class="card-title">🤖 Recepcionista IA para WhatsApp</span>
+<a class="refresh-btn" href="/torre-control/recepcionista" style="text-decoration:none;color:var(--accent);border-color:var(--accent)">Configurar</a>
+</div>
+<div class="card-sub">Configura la recepcionista de cada cliente (servicios, horario, política de precios, FAQs y teléfono de escalamiento) y prueba el cerebro con un mensaje real. Producto en construcción: el transporte de WhatsApp por cliente es el último paso.</div>
 </div>
 <div class="card" style="margin-bottom:30px">
 <div class="card-header">
@@ -202,9 +255,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 <div class="seq-note" id="seq-note"></div>
 </div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-guaki" role="tabpanel" aria-hidden="true">
+<div class="card" style="margin-bottom:30px">
+<div class="card-header"><span class="card-title">🦝 Guaki · Marketplace</span><span id="guaki-pill" class="pill warn">Verificando...</span></div>
+<p class="tab-note">Guaki es una app aparte (directorio inteligente por voz). Aquí viven sus accesos y el estado de su servicio; sus métricas se ven dentro de Guaki.</p>
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<a class="refresh-btn" href="https://guakiweb.vercel.app" target="_blank" rel="noopener" style="text-decoration:none">Abrir Guaki</a>
+<a class="refresh-btn" href="https://guakiweb.vercel.app/directorio" target="_blank" rel="noopener" style="text-decoration:none">Directorio</a>
+<a class="refresh-btn" href="https://guakiweb.vercel.app/provider/dashboard" target="_blank" rel="noopener" style="text-decoration:none">Panel de negocios</a>
+<a class="refresh-btn" href="https://guakiweb.vercel.app/api/health" target="_blank" rel="noopener" style="text-decoration:none">Health</a>
+</div>
+</div>
 <div class="card">
-<div class="card-header"><span class="card-title">📋 Logs</span><button class="btn btn-blue" onclick="clearLogs()">Limpiar</button></div>
-<div class="logs" id="logs"><div class="log-e"><span class="log-t">--:--:--</span><span class="log-info">Cargando...</span></div></div>
+<div class="card-header"><span class="card-title">Estado del servicio Guaki</span></div>
+<div id="guaki-body"><div class="card-sub">Cargando...</div></div>
+</div>
 </div>
 <!-- Modal: preview de plantilla. sandbox SIN allow-scripts: las plantillas
      traen style inline, no JS, y asi nada dentro del preview puede ejecutar. -->
@@ -613,6 +680,48 @@ loadWhatsApp();
 loadTemplates();
 loadSequenceStatus();
 autoT=setInterval(loadAll,10000);
+
+// ---- Pestañas por marca: Mapache · Veyra · Guaki -------------------------
+// Cada marca vive en su panel. El dashboard NO mezcla datos de una con otra.
+function showTab(name){
+  document.querySelectorAll('.tab-panel').forEach(p=>{ const on=p.id==='tab-'+name; p.classList.toggle('active',on); p.setAttribute('aria-hidden', on?'false':'true'); });
+  document.querySelectorAll('.tab').forEach(b=>{ const on=b.getAttribute('data-tab')===name; b.classList.toggle('active',on); b.setAttribute('aria-selected', on?'true':'false'); });
+  try{ localStorage.setItem('torre_tab', name); }catch(_){}
+  if(name==='guaki') checkGuaki();
+}
+function initTab(){
+  let t='mapache';
+  try{ t=localStorage.getItem('torre_tab')||'mapache'; }catch(_){}
+  if(!document.getElementById('tab-'+t)) t='mapache';
+  showTab(t);
+}
+
+// Estado real de Guaki (si el navegador bloquea por CORS, se dice con honestidad).
+async function checkGuaki(){
+  const pill=document.getElementById('guaki-pill');
+  const body=document.getElementById('guaki-body');
+  if(!pill||!body)return;
+  pill.className='pill warn'; pill.textContent='Verificando...';
+  body.innerHTML='<div class="card-sub">Consultando guakiweb.vercel.app/api/health...</div>';
+  try{
+    const r=await fetch('/torre-control/guaki/status',{cache:'no-store'});
+    const j=await r.json().catch(()=>({}));
+    const d=j.health||{};
+    const st=(d.status||'').toUpperCase();
+    const dep=d.dependencies||{};
+    const ok=!!j.ok&&st==='HEALTHY';
+    pill.className='pill '+(ok?'on':'warn');
+    pill.textContent=ok?'Operativo':(st||'Sin estado');
+    body.innerHTML='<div class="card-sub">Estado: <strong>'+(st||'—')+'</strong> · Supabase: <strong>'+(dep.supabase||'—')+'</strong></div>'
+      +'<div class="card-sub" style="margin-top:8px">Mapache: '+(dep.mapache||'—')+' · Relay: '+(dep.relay||'—')+'</div>'
+      +'<div class="card-sub" style="margin-top:8px">Consultado server-side (sin CORS) · HTTP '+(j.status_code||'—')+'</div>';
+  }catch(e){
+    pill.className='pill warn'; pill.textContent='No verificable';
+    body.innerHTML='<div class="card-sub">No se pudo consultar el estado de Guaki.</div>';
+    log('Guaki status: '+e.message,'warn');
+  }
+}
+initTab();
 // Escape cierra SOLO el preview: el editor se cierra por sus botones para
 // no descartar ediciones a medio hacer con una tecla accidental.
 document.addEventListener('keydown',e=>{if(e.key==='Escape')pvClose()});
@@ -1793,3 +1902,330 @@ async def website_intake(payload: WebsiteIntakeIn, request: Request) -> dict[str
         "lead_id": str(lead_id),
         "message": "Solicitud registrada en el CRM.",
     }
+
+
+# ---------------------------------------------------------------------------
+# CHEQUEO EXPRESS — Kanban de solicitudes (F4)
+#
+# Lee la tabla veyra_intakes (mismo Supabase), filtra status='chequeo' y
+# expone el diagnóstico guardado en payload.chequeo.diagnosis. La etapa del
+# embudo vive en payload.chequeo.stage.
+# ---------------------------------------------------------------------------
+
+_CHEQUEO_STAGES = ("nuevo", "contactado", "agendado", "llamada", "informe", "ganado", "perdido")
+
+
+def _chequeo_token_ok(request: Request) -> bool:
+    """Autoriza el kanban del Chequeo Express con el token de operador.
+
+    Falla cerrado: si el token no está configurado (config o entorno), nadie
+    entra. Acepta el token por cabecera X-Veyra-Token o por query (?token=).
+    """
+    esperado = ""
+    try:
+        valor = get_settings().veyra_admin_token
+        esperado = valor.get_secret_value() if valor is not None else ""
+    except Exception:  # noqa: BLE001
+        esperado = ""
+    if not esperado:
+        esperado = (os.environ.get("VEYRA_ADMIN_TOKEN") or "").strip()
+    if not esperado:
+        return False
+    dado = (
+        request.headers.get("x-veyra-token")
+        or request.query_params.get("token")
+        or ""
+    ).strip()
+    return hmac.compare_digest(dado, esperado)
+
+
+@router.get("/chequeo", response_class=HTMLResponse, include_in_schema=False)
+async def chequeo_kanban() -> str:
+    """Página (kanban) de las solicitudes del Chequeo Express.
+
+    La página es pública pero no contiene datos: todo se consume del endpoint
+    /chequeo/data, que exige el token de operador.
+    """
+    return CHEQUEO_HTML
+
+
+@router.get("/chequeo/data")
+async def chequeo_data(request: Request, limit: int = 200) -> dict[str, Any]:
+    """Solicitudes del Chequeo Express con su diagnóstico y etapa."""
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
+
+    from app.core.supabase_http import select as pg_select
+
+    try:
+        filas = await pg_select(
+            "veyra_intakes",
+            columns="intake_id,name,phone,token,status,created_at,whatsapp_sent_at,payload",
+            filters={"status": "chequeo"},
+            order="created_at.desc",
+            limit=limit,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("chequeo_data_error", error=str(exc))
+        return {"items": [], "total": 0, "error": str(exc)}
+
+    items: list[dict[str, Any]] = []
+    for fila in filas:
+        payload = fila.get("payload") or {}
+        chequeo = payload.get("chequeo") or {}
+        diag = chequeo.get("diagnosis") or {}
+        numero = _telefono_e164(fila.get("phone"), fila.get("phone"))
+        items.append(
+            {
+                "intake_id": fila.get("intake_id"),
+                "name": fila.get("name"),
+                "phone": numero or "",
+                "phone_display": fila.get("phone") or "",
+                "token": fila.get("token") or "",
+                "perfil": diag.get("profileName") or "",
+                "level": diag.get("levelLabel") or "",
+                "score": diag.get("overall"),
+                "fuga": diag.get("anualizado") or "",
+                "stage": chequeo.get("stage") or "nuevo",
+                "whatsapp_sent_at": fila.get("whatsapp_sent_at"),
+                "created_at": fila.get("created_at"),
+            }
+        )
+
+    return {"items": items, "total": len(items)}
+
+
+class _StageBody(BaseModel):
+    stage: str
+
+
+@router.post("/chequeo/{intake_id}/stage")
+async def chequeo_set_stage(intake_id: str, body: _StageBody, request: Request) -> dict[str, Any]:
+    """Mueve una solicitud de etapa en el embudo (persistido en payload)."""
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
+
+    from app.core.supabase_http import select as pg_select
+    from app.core.supabase_http import update as pg_update
+
+    stage = (body.stage or "").strip().lower()
+    if stage not in _CHEQUEO_STAGES:
+        raise HTTPException(status_code=422, detail=f"Etapa inválida: {stage}")
+
+    try:
+        filas = await pg_select(
+            "veyra_intakes",
+            columns="intake_id,payload",
+            filters={"intake_id": intake_id},
+            limit=1,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("chequeo_stage_select_error", error=str(exc))
+        raise HTTPException(status_code=503, detail="No se pudo leer la solicitud.") from exc
+
+    if not filas:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada.")
+
+    payload = filas[0].get("payload") or {}
+    chequeo = payload.get("chequeo") or {}
+    chequeo["stage"] = stage
+    payload["chequeo"] = chequeo
+
+    actualizadas = await pg_update(
+        "veyra_intakes",
+        {"intake_id": intake_id},
+        {"payload": payload},
+    )
+    if not actualizadas:
+        raise HTTPException(status_code=503, detail="No se pudo actualizar la etapa.")
+
+    logger.info("chequeo_stage_ok", intake_id=intake_id, stage=stage)
+    return {"status": "OK", "intake_id": intake_id, "stage": stage}
+
+
+@router.get("/guaki/status")
+async def guaki_status() -> dict[str, Any]:
+    """Estado del servicio Guaki, consultado server-side (evita CORS).
+
+    Guaki es una app aparte; la Torre solo muestra su salud para no mezclar
+    sus métricas con las de Veyra o Mapache.
+    """
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as c:
+            r = await c.get("https://guakiweb.vercel.app/api/health")
+        data: dict[str, Any] = {}
+        if "application/json" in (r.headers.get("content-type") or ""):
+            try:
+                data = r.json()
+            except Exception:  # noqa: BLE001
+                data = {}
+        return {"ok": r.status_code == 200, "status_code": r.status_code, "health": data}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("guaki_status_error", error=str(exc)[:120])
+        return {"ok": False, "error": str(exc)[:120]}
+
+
+# ---------------------------------------------------------------------------
+# RECEPCIONISTA IA PARA WHATSAPP (producto) - configuracion por cliente
+# Protegido con el token de operador (mismo que el kanban).
+# ---------------------------------------------------------------------------
+
+class _ReceptionistBody(BaseModel):
+    client_name: str | None = None
+    company: str | None = None
+    whatsapp_number: str | None = None
+    services: list[Any] | None = None
+    price_policy: str | None = None
+    hours: str | None = None
+    faqs: list[Any] | None = None
+    escalation_phone: str | None = None
+    tone: str | None = None
+    transport: str | None = None
+    wa_session: str | None = None
+    provider: str | None = None
+    phone_number_id: str | None = None
+    access_token_env: str | None = None
+    active: bool | None = None
+
+
+class _ReceptionistReplyBody(BaseModel):
+    message: str
+    first_message: bool = False
+
+
+@router.get("/receptionists")
+async def receptionists_list(request: Request) -> dict[str, Any]:
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
+    from app.services.receptionist_svc import listar_configs
+    return {"items": await listar_configs()}
+
+
+@router.post("/receptionists")
+async def receptionists_create(request: Request, body: _ReceptionistBody) -> dict[str, Any]:
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
+    from app.services.receptionist_svc import crear_config
+    fila = await crear_config(body.model_dump(exclude_none=True))
+    if not fila:
+        raise HTTPException(status_code=422, detail="Falta el nombre del cliente.")
+    return {"status": "OK", "receptionist": fila}
+
+
+@router.patch("/receptionists/{config_id}")
+async def receptionists_update(config_id: str, request: Request, body: _ReceptionistBody) -> dict[str, Any]:
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
+    from app.services.receptionist_svc import actualizar_config
+    fila = await actualizar_config(config_id, body.model_dump(exclude_none=True))
+    if not fila:
+        raise HTTPException(status_code=404, detail="Sin campos validos o recepcionista inexistente.")
+    return {"status": "OK", "receptionist": fila}
+
+
+@router.post("/receptionists/{config_id}/reply")
+async def receptionists_reply(config_id: str, request: Request, body: _ReceptionistReplyBody) -> dict[str, Any]:
+    """Prueba el cerebro: dado un mensaje, devuelve la respuesta y si escala."""
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
+    from app.core.supabase_http import select as pg_select
+    from app.services.receptionist_svc import responder
+    filas = await pg_select("wa_receptionists", columns="*", filters={"id": config_id}, limit=1)
+    if not filas:
+        raise HTTPException(status_code=404, detail="Recepcionista no encontrada.")
+    resultado = responder(filas[0], body.message, primer_mensaje=body.first_message)
+    return {"status": "OK", **resultado}
+
+
+@router.get("/recepcionista", response_class=HTMLResponse, include_in_schema=False)
+async def recepcionista_page() -> str:
+    """Pagina para configurar y probar la Recepcionista IA.
+
+    La pagina no contiene datos: todo pasa por la API, que exige el token de
+    operador.
+    """
+    return RECEPTIONIST_HTML
+
+
+# ---------------------------------------------------------------------------
+# RECEPCIONISTA IA - runtime (inbound) y medicion de resultados (Fase G)
+# ---------------------------------------------------------------------------
+
+class _InboundBody(BaseModel):
+    message: str
+    contact: str | None = None
+    send: bool = False
+
+
+class _ResultBody(BaseModel):
+    client_name: str | None = None
+    period: str | None = None
+    baseline: dict[str, Any] | None = None
+    current: dict[str, Any] | None = None
+    notes: str | None = None
+
+
+class _CompareBody(BaseModel):
+    baseline: dict[str, Any] | None = None
+    current: dict[str, Any] | None = None
+
+
+@router.post("/receptionists/{config_id}/inbound")
+async def receptionists_inbound(config_id: str, request: Request, body: _InboundBody) -> dict[str, Any]:
+    """Atiende un mensaje entrante de un cliente final (runtime del producto).
+
+    Modo seguro por defecto: registra y devuelve la respuesta. Con `send=true`
+    usa el transporte piloto (bot de Veyra) y avisa al humano si escala.
+    """
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
+    from app.core.supabase_http import select as pg_select
+    from app.services.receptionist_svc import procesar_entrante
+
+    filas = await pg_select("wa_receptionists", columns="*", filters={"id": config_id}, limit=1)
+    if not filas:
+        raise HTTPException(status_code=404, detail="Recepcionista no encontrada.")
+    resultado = await procesar_entrante(filas[0], body.message, contacto=body.contact, enviar=body.send)
+    return {"status": "OK", **resultado}
+
+
+@router.get("/receptionists/{config_id}/history")
+async def receptionists_history(config_id: str, request: Request, limit: int = 100) -> dict[str, Any]:
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
+    from app.services.receptionist_svc import historial
+
+    return {"items": await historial(config_id, limit=limit)}
+
+
+@router.get("/results")
+async def results_list(request: Request, client: str | None = None) -> dict[str, Any]:
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
+    from app.services.results_svc import listar_resultados
+
+    return {"items": await listar_resultados(client)}
+
+
+@router.post("/results")
+async def results_create(request: Request, body: _ResultBody) -> dict[str, Any]:
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
+    from app.services.results_svc import registrar_resultado
+
+    fila = await registrar_resultado(body.model_dump(exclude_none=True))
+    if not fila:
+        raise HTTPException(status_code=422, detail="Falta el nombre del cliente.")
+    return {"status": "OK", "result": fila}
+
+
+@router.post("/results/compare")
+async def results_compare(request: Request, body: _CompareBody) -> dict[str, Any]:
+    """Compara linea base vs medicion (util para armar el informe de resultados)."""
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
+    from app.services.results_svc import resumen_mejora
+
+    return {"status": "OK", **resumen_mejora(body.baseline, body.current)}
