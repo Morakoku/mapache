@@ -11,12 +11,20 @@ backend/convert_sql.py
 backend/continuous_discovery_loop.py
 backend/supabase/.temp/
 backend/.venv/
-backend/__pycache__/
-backend/**/__pycache__/
+__pycache__/
+*.py[cod]
 backend/.mypy_cache/
 backend/.pytest_cache/
 backend/.ruff_cache/
 backend/crm_backend.egg-info/
+
+# Temporales del CLI de Supabase (cambian en cada uso)
+supabase/.temp/
+backend/supabase/.temp/
+
+# Logs y estado operativo local
+*.log
+backend/scripts/warmup_state.json
 
 .vercel
 .env*
