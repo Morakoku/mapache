@@ -25,6 +25,7 @@ backend/supabase/.temp/
 # Logs y estado operativo local
 *.log
 backend/scripts/warmup_state.json
+backend/scripts/*_no_match.json
 
 .vercel
 .env*
