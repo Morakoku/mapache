@@ -11,10 +11,10 @@ import uuid
 from typing import Any
 
 from app.core.database import session_scope
-from app.core.enums import JobStatus, JobType, SerpProvider, SourceType
 from app.core.logging import get_logger
 from app.core.security import decrypt
 from app.models.search import Search
+
 # Lazy imports for scrapers (avoid playwright in serverless)
 # from app.scrapers.base import ProviderBlockedError, RawPlace
 # from app.scrapers.google_maps.browser import BrowserConfig
@@ -72,24 +72,23 @@ async def run_discovery(job_id: uuid.UUID, payload: dict[str, Any]) -> None:
 
         # Lazy import for scraper provider
         try:
-            from app.scrapers.registry import build_provider, source_type_for
             from app.scrapers.base import ProviderBlockedError
+            from app.scrapers.registry import build_provider
         except ImportError as e:
             await jobs.mark_failed(job_id, f"Proveedor no disponible: {e}")
             logger.error("scraper_import_failed", error=str(e))
             return
 
-        provider = build_provider(provider_name)
-        source_type = source_type_for(provider_name)
-
-        # Configuración del proveedor
-        if provider_name in {"APIFY", "SERPAPI"}:
-            # API key from settings
+        provider_kwargs: dict[str, Any] = {}
+        if provider_name in {"GOOGLE_PLACES_API", "google_places_api"}:
             settings = await SettingsService(session).get_or_404("scraper")
-            api_key = decrypt(settings.get(f"{provider_name.lower()}_api_key", ""))
+            api_key = decrypt(settings.get("google_places_key", ""))
             if not api_key:
-                await jobs.mark_failed(job_id, f"{provider_name} API key no configurada")
+                await jobs.mark_failed(job_id, "Google Places API key no configurada")
                 return
+            provider_kwargs["google_places_key"] = api_key
+
+        provider = build_provider(provider_name, **provider_kwargs)
 
         try:
             async with session_scope() as s:
@@ -97,26 +96,40 @@ async def run_discovery(job_id: uuid.UUID, payload: dict[str, Any]) -> None:
                 saved = 0
                 duplicates = 0
 
-                async for raw_place in provider.search(
-                    query=search.query,
-                    location=search.city,
-                    max_results=search.max_results,
-                    api_key=api_key if provider_name in {"APIFY", "SERPAPI"} else None,
-                ):
+                # SearchQuery es el contrato del proveedor, agnóstico de la
+                # fila de `searches`: campos normalizados, no los de la tabla.
+                from app.scrapers.base import SearchQuery
+
+                query = SearchQuery(
+                    business_type=search.business_type,
+                    city=search.city,
+                    keywords=search.keywords or [],
+                    zone=search.zone,
+                    country=search.country,
+                    region=search.region,
+                    latitude=search.latitude,
+                    longitude=search.longitude,
+                    radius_km=float(search.radius_km or 10),
+                    limit=search.target_count or 100,
+                    min_rating=float(search.min_rating) if search.min_rating is not None else None,
+                    max_reviews=search.max_reviews,
+                    strict_match=search.strict_match,
+                )
+
+                async for raw_place in provider.search(query):
                     if not _meets_requirements(raw_place, search):
                         continue
 
-                    # Check duplicate
-                    existing = await companies_svc.find_by_dedupe_key(
-                        search.owner_id, raw_place.dedupe_key
+                    # Upsert: crea o actualiza la empresa (dedupe por google_id
+                    # y dedupe_key). Un resultado repetido actualiza la ficha
+                    # en vez de duplicarla.
+                    result = await companies_svc.upsert_from_raw(
+                        raw_place, owner_id=search.owner_id
                     )
-                    if existing:
+                    if result.is_new:
+                        saved += 1
+                    else:
                         duplicates += 1
-                        continue
-
-                    # Create company
-                    await companies_svc.create_from_raw(raw_place, source_type, search.owner_id)
-                    saved += 1
 
                     if saved % _COMMIT_EVERY == 0:
                         await s.commit()
@@ -124,26 +137,37 @@ async def run_discovery(job_id: uuid.UUID, payload: dict[str, Any]) -> None:
 
                 await s.commit()
 
-            await jobs.mark_completed(job_id, {
-                "saved": saved,
-                "duplicates": duplicates,
-                "provider": provider_name,
-            })
-            logger.info("discovery_completed", job_id=str(job_id), saved=saved, duplicates=duplicates)
+            await jobs.mark_completed(
+                job_id,
+                {
+                    "saved": saved,
+                    "duplicates": duplicates,
+                    "provider": provider_name,
+                },
+            )
+            logger.info(
+                "discovery_completed", job_id=str(job_id), saved=saved, duplicates=duplicates
+            )
 
         except ProviderBlockedError as e:
             await jobs.mark_failed(job_id, f"Proveedor bloqueado: {e}")
             logger.warning("provider_blocked", provider=provider_name, error=str(e))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             await jobs.mark_failed(job_id, str(e))
             logger.exception("discovery_failed", job_id=str(job_id), error=str(e))
 
 
 async def run_provider_health(job_id: uuid.UUID, payload: dict[str, Any]) -> None:
     """Health check de proveedores de scraping."""
-    # Simple health check - just verify we can import
-    try:
-        from app.scrapers.registry import AVAILABLE_PROVIDERS
-        await JobService(session).mark_completed(job_id, {"providers": list(AVAILABLE_PROVIDERS)})
-    except Exception as e:
-        await JobService(session).mark_failed(job_id, str(e))
+
+    async with session_scope() as session:
+        jobs = JobService(session)
+        await jobs.mark_running(job_id)
+        await session.commit()
+        try:
+            from app.scrapers.registry import AVAILABLE_PROVIDERS
+
+            await jobs.mark_completed(job_id, {"providers": list(AVAILABLE_PROVIDERS)})
+        except Exception as e:
+            await jobs.mark_failed(job_id, str(e))
+            logger.exception("provider_health_failed", job_id=str(job_id), error=str(e))

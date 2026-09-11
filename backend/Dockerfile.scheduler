@@ -1,0 +1,53 @@
+# Scheduler de scraping de Mapache CRM en contenedor.
+#
+# Aísla Camoufox/Scrapling del host: si el navegador leakuea memoria,
+# el OOM-killer del contenedor lo mata a él y no al PC completo
+# (Kernel-Power 41 = apagón en seco, el bug original en Windows).
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Dependencias de sistema de Camoufox (Firefox headless) en Linux.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libgtk-3-0 \
+      libdbus-glib-1-2 \
+      libasound2 \
+      libx11-xcb1 \
+      libxcb1 \
+      libxcomposite1 \
+      libxdamage1 \
+      libxfixes3 \
+      libxrandr2 \
+      libxtst6 \
+      libxss1 \
+      libatk1.0-0 \
+      libatk-bridge2.0-0 \
+      libatspi2.0-0 \
+      libpango-1.0-0 \
+      libcairo2 \
+      libgdk-pixbuf-2.0-0 \
+      libnss3 \
+      libnspr4 \
+      libgbm1 \
+      libxkbcommon0 \
+      libcups2 \
+      libdrm2 \
+      libxshmfence1 \
+      fonts-liberation \
+      fonts-dejavu-core \
+      procps \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml ./
+COPY app ./app
+
+# Backend + Scrapling + Camoufox. `camoufox fetch` descarga el navegador
+# a la imagen para que el contenedor no lo descargue en cada arranque.
+RUN pip install --no-cache-dir . "scrapling[all]" "camoufox[geoip]" "curl_cffi" \
+    && camoufox fetch \
+    && patchright install chromium
+
+CMD ["python", "app/scheduler_local.py", "--interval", "30"]

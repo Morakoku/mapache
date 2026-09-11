@@ -53,5 +53,31 @@ services:
     logging:
       driver: none    # mailhog es ruidoso y no aporta nada al log
 
+  # Scheduler de scraping aislado del host. El bug original: en Windows
+  # (Task Scheduler + Python nativo) Camoufox leakueaba Chromium, llenaba
+  # la RAM y el PC moría en seco (Kernel-Power 41, sin BSOD). Aquí el
+  # mem_limit hace que el OOM-killer mate SOLO el contenedor.
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.scheduler
+    container_name: crm-scheduler
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      MAPACHE_SCRAPE_INTERVAL: "30"
+      MAPACHE_QUERIES_PER_CYCLE: "2"
+    deploy:
+      resources:
+        limits:
+          memory: 3g      # techo: Camoufox leakuea y muere aquí, no en el host
+          cpus: "1.5"     # Ryzen 3400G: deja núcleos libres para el resto
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   postgres_data:

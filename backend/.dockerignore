@@ -1,0 +1,15 @@
+.venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+crm_backend.egg-info
+tests
+scripts
+static
+supabase
+migrations
+*.log
+.env
+.env.*
+uv.lock
+continuous_discovery_loop.py
