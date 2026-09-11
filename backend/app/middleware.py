@@ -58,6 +58,8 @@ _PUBLIC_PREFIXES = (
     "/openapi.json",
     "/torre-control",
     "/torre-control/",
+    "/webhook",
+    "/webhook/",
     "/tc-api",
     "/tc-api/",
     "/email-simple-public",

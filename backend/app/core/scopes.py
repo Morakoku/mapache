@@ -66,7 +66,9 @@ _SCOPE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
 # ----------------------------------------------------------------identity
 
 # Scopes por defecto de la identidad `hermes` (configurable vía HERMES_SCOPES).
-DEFAULT_HERMES_SCOPES = PERMITTED_SCOPES
+# Mínimo privilegio: `hermes` (el bot/agente de outbound) NO puede leer datos de
+# Guaki; ese acceso vive en la identidad `guaki` (config: `guaki_scopes`).
+DEFAULT_HERMES_SCOPES = frozenset({SCOPE_DISPATCH_HERMES, SCOPE_HERMES_JOBS_READ})
 
 
 def valid_scope_name(name: str) -> bool:

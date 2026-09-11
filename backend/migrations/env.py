@@ -26,7 +26,9 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", get_settings().alembic_url)
+# str(): pydantic puede devolver un tipo Annotated/URL (p.ej. PostgresDsn) que
+# configparser ya no auto-convierte a string en Python 3.14+.
+config.set_main_option("sqlalchemy.url", str(get_settings().alembic_url))
 
 target_metadata = Base.metadata
 

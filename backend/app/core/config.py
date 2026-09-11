@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     secret_key: SecretStr
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 días
 
+    # Token del operador para la Torre de Control (kanban del Chequeo Express
+    # en /torre-control/chequeo). Si no está configurado, el kanban falla
+    # cerrado (nadie entra). Se compara en tiempo constante.
+    veyra_admin_token: SecretStr | None = None
+
     # ------------------------------------------------------------ servicio-a-servicio (L1)
     # Autenticación mínima para clientes de servicio (Hermes → Mapache) mediante
     # token de portador con firma HMAC-SHA256:
