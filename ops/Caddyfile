@@ -1,0 +1,18 @@
+# Una sola puerta para las operaciones (Appsmith + Metabase).
+# Requiere DOMAIN en ops/.env.ops y el perfil "proxy".
+
+{$DOMAIN} {
+	encode gzip
+	@app host app.{$DOMAIN}
+	@bi host metricas.{$DOMAIN}
+
+	handle @app {
+		reverse_proxy appsmith:80
+	}
+	handle @bi {
+		reverse_proxy metabase:3000
+	}
+	handle {
+		respond "Usa app.{$DOMAIN} o metricas.{$DOMAIN}" 404
+	}
+}

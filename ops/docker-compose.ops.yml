@@ -1,0 +1,83 @@
+# Operaciones unificadas (CRM + BI) sobre la MISMA base (Supabase).
+#
+# Pone Appsmith (CRM/ops) y Metabase (BI/control) detras de un solo Caddy,
+# en vez de 5 localhost distintos. La base es Supabase (externa): se conecta
+# desde la UI de cada herramienta, no hay Postgres aqui.
+#
+# Uso local:
+#   docker compose -f ops/docker-compose.ops.yml --env-file ops/.env.ops up -d
+#   Appsmith  -> http://localhost:8090
+#   Metabase  -> http://localhost:3001
+# Con dominio (perfil proxy):
+#   docker compose ... --profile proxy up -d
+#   app.DOMINIO -> Appsmith ; metricas.DOMINIO -> Metabase
+
+name: ops
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: ops-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ops_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  appsmith:
+    # CRM / panel de operacion. Se conecta a Supabase Postgres desde la UI.
+    image: appsmith/appsmith-ce:latest
+    container_name: ops-appsmith
+    restart: unless-stopped
+    ports:
+      - "8090:80"
+    volumes:
+      - ops_appsmith:/appsmith-stacks
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  metabase:
+    # BI / control. Se conecta a la misma base (Supabase) desde la UI.
+    image: metabase/metabase:latest
+    container_name: ops-metabase
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      MB_DB_TYPE: h2
+      JAVA_TIMEZONE: America/Bogota
+    volumes:
+      - ops_metabase:/metabase-data
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  caddy:
+    # Una sola puerta con TLS y subdominios. Solo con --profile proxy.
+    image: caddy:2
+    container_name: ops-caddy
+    profiles: ["proxy"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ops_caddy_data:/data
+      - ops_caddy_config:/config
+
+volumes:
+  ops_redis:
+  ops_appsmith:
+  ops_metabase:
+  ops_caddy_data:
+  ops_caddy_config:
