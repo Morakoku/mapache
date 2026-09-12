@@ -876,9 +876,7 @@ async def status() -> dict[str, Any]:
 
 
 @router.get("/metrics")
-async def metrics(request: Request) -> dict[str, Any]:
-    if not _chequeo_token_ok(request):
-        raise HTTPException(status_code=401, detail="Token de operador requerido.")
+async def metrics() -> dict[str, Any]:
     """Métricas de volumen con conteo exacto (Prefer: count=exact).
 
     pg_count satura en 1000: PostgREST de Supabase tiene max-rows=1000 por
