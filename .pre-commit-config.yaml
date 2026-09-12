@@ -1,0 +1,16 @@
+# Chequeo de secretos en pre-commit (opt-in, no rompe nada).
+#
+# Instalar una vez por clon:
+#   pip install pre-commit
+#   pre-commit install
+#
+# A partir de ahí, cada `git commit` escanea SOLO los archivos en stage y
+# bloquea el commit si detecta un secreto nuevo (no escanea el historial, así
+# que los secretos ya commiteados no impiden trabajar). Para saltarlo en un
+# caso justificado: `SKIP=gitleaks git commit ...`.
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

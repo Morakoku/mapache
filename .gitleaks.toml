@@ -1,0 +1,41 @@
+# Configuración de gitleaks para Mapache.
+#
+# Hereda todas las reglas por defecto y solo añade una allowlist de
+# falsos positivos conocidos (placeholders de plantillas, valores de test y
+# documentación). NO se permite `backend/.env.production.example`: ese archivo
+# contiene un secreto real y debe seguir generando hallazgos hasta que se
+# purgue el historial (ver docs/ROTACION_SECRETOS_2026-09-12.md).
+#
+# Uso local:    gitleaks detect --config .gitleaks.toml --redact
+# Uso staged:   gitleaks protect --staged --config .gitleaks.toml --redact
+# Pre-commit:   pre-commit install && pre-commit run gitleaks --all-files
+
+title = "Mapache gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Placeholders, valores de test y documentación (no son secretos)"
+paths = [
+  '''backend/\.env\.example''',
+  '''backend/\.env\.test''',
+  '''backend/tests/.*''',
+  '''docs/.*''',
+  '''.*\.md''',
+  '''.*\.html''',
+  '''ops/\.env\.ops\.example''',
+  '''ops/deploy/\.env\.example''',
+]
+regexes = [
+  '''CAMBIAME''',
+  '''cambiar-por''',
+  '''<placeholder>''',
+  '''\[SENSITIVE\]''',
+  '''test-secret-key''',
+  '''test-service-token-key''',
+  '''sb_publishable_x''',
+  '''sb_secret_x''',
+  '''re_xxxx''',
+  '''crm:crm@localhost''',
+]
