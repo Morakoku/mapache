@@ -398,6 +398,8 @@ class ClienteSupabase:
             "apikey": api_key,
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "Accept-Profile": "crm",
+            "Content-Profile": "crm",
         }
         self._cliente = httpx.Client(timeout=TIMEOUT_SUPABASE)
 
@@ -517,13 +519,13 @@ class ClienteSupabase:
                 "/rest/v1/leads",
                 params={
                     "select": (
-                        "id,company_id,contact_id,priority,owner_id,first_contact_at,"
+                        "id,company_id,contact_id,owner_id,first_contact_at,score,"
                         "contact:contact_id(email,do_not_contact,first_name,full_name),"
                         "company:company_id(name,category,"
                         "contacts(email,do_not_contact,is_primary,first_name,full_name))"
                     ),
-                    "status": "eq.NEW",
-                    "order": "priority.desc,created_at.asc",
+                    "status": "eq.OPEN",
+                    "order": "created_at.asc",
                     "limit": PAGINA_LEADS,
                     "offset": offset,
                 },

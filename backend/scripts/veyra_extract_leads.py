@@ -27,8 +27,10 @@ load_dotenv(os.path.join(BACKEND, '.env'))
 
 U = (os.environ.get('SUPABASE_URL') or '').rstrip('/')
 K = (os.environ.get('SUPABASE_SERVICE_ROLE_KEY') or '').strip()
-H = {'apikey': K, 'Authorization': 'Bearer ' + K, 'Content-Type': 'application/json'}
+H = {'apikey': K, 'Authorization': 'Bearer ' + K, 'Content-Type': 'application/json',
+     'Accept-Profile': 'crm', 'Content-Profile': 'crm'}
 DEFAULT_STAGE = 'e77d3875-fa3d-46cb-9239-8d71f9399b1e'  # pipeline "Nuevo"
+DEFAULT_SERVICE = '8bc3beb7-4b0b-4eb9-b547-14106e4534eb'  # servicio base de prospeccion
 
 
 def _norm_name(name: str) -> str:
@@ -134,7 +136,7 @@ def main() -> None:
                 })[0]
                 _rest('POST', 'leads', {
                     'company_id': creada['id'], 'contact_id': contact['id'], 'stage_id': DEFAULT_STAGE,
-                    'status': 'NEW', 'source': 'COLD_OUTREACH', 'priority': 0, 'score': 0, 'engagement_score': 0,
+                    'service_id': DEFAULT_SERVICE, 'status': 'OPEN', 'score': 0, 'engagement_score': 0,
                 })
                 existentes.add(dk)
                 creados += 1
