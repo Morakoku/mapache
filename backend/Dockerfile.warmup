@@ -1,0 +1,22 @@
+# VeyraWarmupDaily — envio de emails del warm-up de dominio.
+#
+# Corre el mismo backend/scripts/warmup_resend.py que la tarea nativa de
+# Windows Task Scheduler, pero aislado en contenedor. Se ejecuta por
+# cron interno y sale, asi que usa el runtime Python base sin servidor web.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Contexto de build: ./backend. Las rutas son relativas ahi.
+COPY pyproject.toml /app/pyproject.toml
+COPY app /app/app
+COPY scripts/warmup_resend.py /app/scripts/warmup_resend.py
+# Nota: warmup_state.json es estado vivo. Se monta como volumen en runtime
+# para que persista entre ejecuciones del contenedor descartable.
+# COPY scripts/warmup_state.json /app/scripts/warmup_state.json  # NO copiar: es runtime state
+
+RUN pip install --no-cache-dir httpx python-dotenv
+
+CMD ["python", "/app/scripts/warmup_resend.py", "--check-bounces", "--send"]

@@ -1,0 +1,19 @@
+# Panel de inicio del sistema de operaciones Veyra.
+title: Veyra Ops
+theme: dark
+color: red
+headerStyle: clean
+language: es
+layout:
+  Operacion:
+    style: row
+    columns: 2
+  Datos:
+    style: row
+    columns: 2
+  Automatizacion:
+    style: row
+    columns: 2
+  Administracion:
+    style: row
+    columns: 2

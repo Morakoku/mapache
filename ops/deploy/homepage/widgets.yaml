@@ -1,0 +1,9 @@
+# Widgets globales del panel (recursos del servidor + busqueda).
+- resources:
+    cpu: true
+    memory: true
+    disk: /
+    cpus: true
+- search:
+    provider: google
+    target: _blank

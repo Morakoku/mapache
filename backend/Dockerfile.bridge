@@ -1,0 +1,18 @@
+# VeyraChequeoBridge — puente Chequeo Express -> WhatsApp.
+#
+# Supabase solo se alcanza por HTTP (PostgREST), asi que no necesitamos
+# el runtime del backend entero. Un Python slim con dotenv basta.
+# El envio real por WhatsApp va por HTTP al whatsapp_relay.py del host.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Contexto de build: ./backend. Las rutas son relativas ahi.
+COPY pyproject.toml /app/pyproject.toml
+COPY scripts/veyra_chequeo_bridge.py /app/veyra_chequeo_bridge.py
+
+RUN pip install --no-cache-dir python-dotenv
+
+CMD ["python", "/app/veyra_chequeo_bridge.py"]

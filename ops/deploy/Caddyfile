@@ -1,0 +1,31 @@
+# Una sola puerta para todo el sistema de operaciones.
+# Requiere DOMAIN en .env (ej. veyra.co) y los subdominios apuntando a la VPS.
+
+{$DOMAIN} {
+	redir https://home.{$DOMAIN} permanent
+}
+
+home.{$DOMAIN} {
+	encode gzip
+	reverse_proxy homepage:3000
+}
+
+crm.{$DOMAIN} {
+	encode gzip
+	reverse_proxy appsmith:80
+}
+
+metricas.{$DOMAIN} {
+	encode gzip
+	reverse_proxy metabase:3000
+}
+
+flujos.{$DOMAIN} {
+	encode gzip
+	reverse_proxy n8n:5678
+}
+
+admin.{$DOMAIN} {
+	encode gzip
+	reverse_proxy portainer:9000
+}

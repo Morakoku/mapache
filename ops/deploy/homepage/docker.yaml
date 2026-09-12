@@ -1,0 +1,3 @@
+# Integracion con Docker (Homepage muestra el estado de los contenedores).
+veyra-docker:
+  socket: /var/run/docker.sock

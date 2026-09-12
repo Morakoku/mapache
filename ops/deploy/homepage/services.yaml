@@ -1,0 +1,63 @@
+# Enlaces y widgets del panel. {{HOMEPAGE_VAR_DOMAIN}} se sustituye por DOMAIN.
+- Operacion:
+    - Appsmith (CRM):
+        href: https://crm.{{HOMEPAGE_VAR_DOMAIN}}
+        description: CRM / operacion
+        icon: appsmith.png
+        widget:
+          type: docker
+          container: ops-appsmith
+    - Metabase (BI):
+        href: https://metricas.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Tableros y control
+        icon: metabase.png
+        widget:
+          type: docker
+          container: ops-metabase
+
+- Datos:
+    - API Mapache:
+        href: https://mapache-kappa.vercel.app/torre-control
+        description: Backend / Torre de Control
+        icon: si-fastapi
+    - Supabase:
+        href: https://supabase.com/dashboard
+        description: Base de datos (schema crm)
+        icon: supabase.png
+
+- Automatizacion:
+    - n8n (flujos):
+        href: https://flujos.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Automatizaciones visuales
+        icon: n8n.png
+        widget:
+          type: docker
+          container: ops-n8n
+    - Worker (cola jobs):
+        description: Procesa captar->enviar
+        widget:
+          type: docker
+          container: ops-worker
+    - Scheduler (scraping):
+        description: Descubre empresas
+        widget:
+          type: docker
+          container: ops-scheduler
+
+- Administracion:
+    - Portainer:
+        href: https://admin.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Administrar contenedores
+        icon: portainer.png
+        widget:
+          type: docker
+          container: ops-portainer
+    - Caddy:
+        description: Proxy / TLS
+        widget:
+          type: docker
+          container: ops-caddy
+    - Redis:
+        widget:
+          type: docker
+          container: ops-redis

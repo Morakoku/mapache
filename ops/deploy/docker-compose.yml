@@ -1,0 +1,131 @@
+# Sistema de operaciones Veyra — stack unificado para la VPS (Alibaba Cloud).
+#
+# Todo en Docker, una sola entrada por Caddy. Se conecta a la base (Supabase hoy;
+# Postgres local opcional con el perfil "localdb").
+#
+#   cp .env.example .env      # completar DOMAIN y secretos
+#   docker compose up -d
+#
+# Entradas:
+#   home.DOMINIO      -> Homepage (panel de inicio + estado)
+#   crm.DOMINIO       -> Appsmith (UI CRM/ops)
+#   metricas.DOMINIO  -> Metabase (BI)
+#   flujos.DOMINIO    -> n8n (automatizaciones visuales)
+#   admin.DOMINIO     -> Portainer (admin de Docker)
+
+name: veyra-ops
+
+services:
+  caddy:
+    image: caddy:2
+    container_name: ops-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: ops-home
+    restart: unless-stopped
+    environment:
+      HOMEPAGE_ALLOWED_HOSTS: "home.${DOMAIN:-localhost},localhost,127.0.0.1"
+      HOMEPAGE_VAR_DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./homepage:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  appsmith:
+    image: appsmith/appsmith-ce:latest
+    container_name: ops-appsmith
+    restart: unless-stopped
+    volumes:
+      - appsmith:/appsmith-stacks
+
+  metabase:
+    image: metabase/metabase:latest
+    container_name: ops-metabase
+    restart: unless-stopped
+    environment:
+      JAVA_TIMEZONE: America/Bogota
+    volumes:
+      - metabase:/metabase-data
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: ops-n8n
+    restart: unless-stopped
+    environment:
+      N8N_HOST: flujos.${DOMAIN:-localhost}
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://flujos.${DOMAIN:-localhost}/
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:-change-me}
+      GENERIC_TIMEZONE: America/Bogota
+    volumes:
+      - n8n:/home/node/.n8n
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: ops-portainer
+    restart: unless-stopped
+    command: -H unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer:/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: ops-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis:/data
+
+  # Worker de la cola `jobs` (Mapache). Se conecta a la base por DATABASE_URL.
+  worker:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.worker
+    container_name: ops-worker
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      ENVIRONMENT: local
+    depends_on:
+      - redis
+
+  # Scheduler de scraping (Scrapling).
+  scheduler:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.scheduler
+    container_name: ops-scheduler
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      MAPACHE_SCRAPE_INTERVAL: "30"
+      MAPACHE_QUERIES_PER_CYCLE: "2"
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+          cpus: "1.5"
+
+volumes:
+  caddy_data:
+  caddy_config:
+  appsmith:
+  metabase:
+  n8n:
+  portainer:
+  redis:
