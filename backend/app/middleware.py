@@ -62,7 +62,6 @@ _PUBLIC_PREFIXES = (
     "/webhook/",
     "/tc-api",
     "/tc-api/",
-    "/email-simple-public",
     "/dashboard",
     "/dashboard/",
     "/api/v1/tc",

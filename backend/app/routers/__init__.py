@@ -105,7 +105,6 @@ api_router.include_router(followups.router, prefix="/follow-ups", tags=["seguimi
 # ya enviados: cambiarlas rompería los enlaces de todo lo mandado.
 public_router.include_router(tracking.router, prefix="/tracking", tags=["tracking"])
 public_router.include_router(auth.router, prefix="/auth", tags=["oauth"])
-public_router.include_router(email_simple.router, prefix="/email-simple-public", tags=["email-simple-public"])
 public_router.include_router(public_dashboard.router, prefix="/api/v1/control", tags=["public-dashboard"])
 public_router.include_router(scheduler.router, prefix="/scheduler", tags=["scheduler"])
 

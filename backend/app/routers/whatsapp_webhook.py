@@ -24,21 +24,22 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from app.core.logging import get_logger
+from app.core.security import constant_time_compare
 from app.services import receptionist_svc
 
 logger = get_logger(__name__)
 router = APIRouter()
 
 
-def _firma_valida(raw: bytes, header: str | None) -> bool | None:
-    """Valida la firma de Meta (X-Hub-Signature-256).
+def _firma_valida(raw: bytes, header: str | None) -> bool:
+    """Valida la firma de Meta (X-Hub-Signature-256) en modo fail-closed.
 
-    Devuelve True/False cuando `WHATSAPP_APP_SECRET` esta configurado; None si
-    no lo esta (no se puede validar: se deja pasar, avisando en el log).
+    Si `WHATSAPP_APP_SECRET` falta o esta vacio se rechaza (False): sin secreto
+    no se puede validar la procedencia y no se procesa el webhook.
     """
     secret = (os.environ.get("WHATSAPP_APP_SECRET") or "").strip()
     if not secret:
-        return None
+        return False
     if not header or not header.startswith("sha256="):
         return False
     esperado = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
@@ -54,7 +55,7 @@ async def verificar_webhook(request: Request) -> Response:
     challenge = params.get("hub.challenge", "")
 
     esperado = (os.environ.get("WHATSAPP_VERIFY_TOKEN") or "").strip()
-    if modo == "subscribe" and esperado and token == esperado:
+    if modo == "subscribe" and esperado and token and constant_time_compare(token, esperado):
         return PlainTextResponse(challenge)
     logger.warning("whatsapp_webhook_verify_failed", mode=modo)
     return PlainTextResponse("forbidden", status_code=403)
@@ -91,12 +92,9 @@ async def recibir_webhook(request: Request) -> JSONResponse:
     """Recibe mensajes entrantes y los atiende con la Recepcionista del cliente."""
     raw = await request.body()
     firma = _firma_valida(raw, request.headers.get("x-hub-signature-256"))
-    if firma is False:
+    if not firma:
         logger.warning("whatsapp_webhook_firma_invalida")
         return JSONResponse({"status": "forbidden"}, status_code=403)
-    if firma is None:
-        logger.warning("whatsapp_webhook_sin_app_secret",
-                       nota="configura WHATSAPP_APP_SECRET para validar la firma de Meta")
     try:
         body = json.loads(raw or b"{}")
     except Exception:  # noqa: BLE001

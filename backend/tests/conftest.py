@@ -25,6 +25,18 @@ if _ENV_TEST.exists():
             os.environ.setdefault(key.strip(), value.strip())
 
 from app.core.config import get_settings  # noqa: E402
+
+# Guard duro: los tests NUNCA deben apuntar a una DB de desarrollo/producción.
+# Se ejecuta antes de construir cualquier engine y de cualquier drop_all.
+_TEST_SETTINGS = get_settings()
+_TEST_DSN = str(_TEST_SETTINGS.database_url or "")
+if _TEST_SETTINGS.environment != "test" or ":5434" not in _TEST_DSN:
+    pytest.exit(
+        "ABORTADO: tests apuntan a una DB no-test "
+        f"(environment={_TEST_SETTINGS.environment!r}, dsn={_TEST_DSN!r})",
+        returncode=1,
+    )
+
 from app.core.container import reset_container  # noqa: E402
 from app.core.database import get_db  # noqa: E402
 from app.core.rate_limit import reset_default_limiter  # noqa: E402

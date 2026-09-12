@@ -80,9 +80,9 @@ def test_mensaje_diagnostico():
 
 # --- Firma del webhook (Meta) --------------------------------------------
 
-def test_firma_sin_secreto_no_valida(monkeypatch):
+def test_firma_sin_secreto_rechaza(monkeypatch):
     monkeypatch.delenv("WHATSAPP_APP_SECRET", raising=False)
-    assert whatsapp_webhook._firma_valida(b"{}", None) is None
+    assert whatsapp_webhook._firma_valida(b"{}", None) is False
 
 
 def test_firma_valida_e_invalida(monkeypatch):
