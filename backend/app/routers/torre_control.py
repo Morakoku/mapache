@@ -28,7 +28,7 @@ from typing import Any
 from urllib.parse import quote as url_quote
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -40,6 +40,16 @@ from app.routers.torre_receptionist_html import RECEPTIONIST_HTML
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["torre-control"])
+
+
+def _require_operator(request: Request) -> None:
+    """Dependencia: exige el token de operador en los endpoints de datos.
+
+    Las paginas HTML de la Torre se sirven sin token (llevan su propio gate
+    en el navegador); los datos SI exigen token.
+    """
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
 
 
 DASHBOARD_HTML = """<!DOCTYPE html>
@@ -158,6 +168,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 </style>
 </head>
 <body>
+<div id="gate" style="position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;z-index:9999">
+<div style="background:var(--card);border:1px solid var(--border);padding:28px;border-radius:10px;width:320px;text-align:center">
+<div style="font-size:32px;margin-bottom:8px">&#129437;</div>
+<div style="font-weight:600;margin-bottom:4px">Torre de Control</div>
+<div style="color:var(--muted);font-size:13px;margin-bottom:16px">Acceso de operador</div>
+<input id="gateToken" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Token" onkeydown="if(event.key==='Enter')gateEnter()" style="width:100%;padding:10px;background:#0a0a0a;border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:15px;text-align:center;margin-bottom:12px">
+<button onclick="gateEnter()" style="width:100%;padding:10px;background:var(--accent);color:#0a0a0a;border:0;border-radius:6px;font-weight:600;cursor:pointer">Entrar</button>
+<div id="gateErr" style="color:var(--red);font-size:12px;margin-top:10px;min-height:16px"></div>
+</div>
+</div>
 <div class="header">
 <h1><span class="logo">🦝</span> Torre de Control</h1>
 <div style="display:flex;gap:15px;align-items:center">
@@ -312,6 +332,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 </div>
 <script>
 const API='/torre-control';
+let TOKEN=sessionStorage.getItem('veyra_ops_token')||'';
+const _origFetch=window.fetch.bind(window);
+window.fetch=function(u,o){o=o||{};o.headers=Object.assign({'X-Veyra-Token':TOKEN},o.headers||{});return _origFetch(u,o);};
+function gateShow(){const g=document.getElementById('gate');if(g){g.style.display='flex';const i=document.getElementById('gateToken');if(i)i.focus();}}
+function gateEnter(){const v=(document.getElementById('gateToken').value||'').trim();if(!v){document.getElementById('gateErr').textContent='Ingresa el token';return;}TOKEN=v;sessionStorage.setItem('veyra_ops_token',v);location.reload();}
 let autoT=null;
 let logs=[];
 function t(){return new Date().toLocaleTimeString('es-CO')}
@@ -674,12 +699,14 @@ async function toggleAuto(){
 if(autoT){clearInterval(autoT);autoT=null;document.getElementById('auto-txt').textContent='OFF'}
 else{autoT=setInterval(loadAll,10000);document.getElementById('auto-txt').textContent='ON'}
 }
+if(TOKEN){
 loadAll();
 loadPipeline();
 loadWhatsApp();
 loadTemplates();
 loadSequenceStatus();
 autoT=setInterval(loadAll,10000);
+}else{gateShow();}
 
 // ---- Pestañas por marca: Mapache · Veyra · Guaki -------------------------
 // Cada marca vive en su panel. El dashboard NO mezcla datos de una con otra.
@@ -791,7 +818,7 @@ async def manual() -> str:
     )
 
 
-@router.get("/status")
+@router.get("/status", dependencies=[Depends(_require_operator)])
 async def status() -> dict[str, Any]:
     results: dict[str, Any] = {"services": {}, "timestamp": datetime.now(UTC).isoformat()}
     settings = get_settings()
@@ -875,7 +902,7 @@ async def status() -> dict[str, Any]:
     return results
 
 
-@router.get("/metrics")
+@router.get("/metrics", dependencies=[Depends(_require_operator)])
 async def metrics() -> dict[str, Any]:
     """Métricas de volumen con conteo exacto (Prefer: count=exact).
 
@@ -894,7 +921,7 @@ async def metrics() -> dict[str, Any]:
     }
 
 
-@router.get("/pipeline")
+@router.get("/pipeline", dependencies=[Depends(_require_operator)])
 async def pipeline() -> dict[str, Any]:
     """Estado del pipeline de scraping: verticales, actividad reciente y salud.
 
@@ -1102,7 +1129,7 @@ def _wa_link(numero: str, texto: str) -> str:
     return f"https://wa.me/{numero}?text={url_quote(texto)}"
 
 
-@router.get("/contact-whatsapp")
+@router.get("/contact-whatsapp", dependencies=[Depends(_require_operator)])
 async def contact_whatsapp(limit: int = 50) -> dict[str, Any]:
     """Leads contactables por WhatsApp: empresa con teléfono y datos de ficha.
 
@@ -1158,7 +1185,7 @@ async def contact_whatsapp(limit: int = 50) -> dict[str, Any]:
     }
 
 
-@router.post("/contact-whatsapp/{lead_id}/copy")
+@router.post("/contact-whatsapp/{lead_id}/copy", dependencies=[Depends(_require_operator)])
 async def contact_whatsapp_copy(lead_id: str) -> dict[str, Any]:
     """Genera dos variantes de copy de primer contacto para un lead.
 
@@ -1213,7 +1240,7 @@ class WhatsAppAttemptIn(BaseModel):
     notes: str | None = None
 
 
-@router.post("/contact-whatsapp/{lead_id}/attempt")
+@router.post("/contact-whatsapp/{lead_id}/attempt", dependencies=[Depends(_require_operator)])
 async def contact_whatsapp_attempt(
     lead_id: str, payload: WhatsAppAttemptIn | None = None
 ) -> dict[str, Any]:
@@ -1354,7 +1381,7 @@ class TemplateUpdateIn(BaseModel):
     is_active: bool | None = None
 
 
-@router.get("/templates")
+@router.get("/templates", dependencies=[Depends(_require_operator)])
 async def listar_templates(
     category: str | None = None, limit: int = 200
 ) -> dict[str, Any]:
@@ -1390,7 +1417,7 @@ async def listar_templates(
     return salida
 
 
-@router.get("/templates/{template_id}")
+@router.get("/templates/{template_id}", dependencies=[Depends(_require_operator)])
 async def obtener_template(template_id: str) -> dict[str, Any]:
     """Plantilla completa (body_html y body_text) para el preview/editor."""
     from app.core.supabase_http import select as pg_select
@@ -1418,7 +1445,7 @@ async def obtener_template(template_id: str) -> dict[str, Any]:
     return {"template": filas[0]}
 
 
-@router.patch("/templates/{template_id}")
+@router.patch("/templates/{template_id}", dependencies=[Depends(_require_operator)])
 async def actualizar_template(
     template_id: str, payload: TemplateUpdateIn
 ) -> dict[str, Any]:
@@ -1507,7 +1534,7 @@ async def actualizar_template(
         ) from exc
 
 
-@router.get("/sequence-status")
+@router.get("/sequence-status", dependencies=[Depends(_require_operator)])
 async def estado_secuencia() -> dict[str, Any]:
     """Estado de la secuencia "Veyra MRI Outbound 30d" con sus 8 pasos.
 
@@ -1651,13 +1678,13 @@ async def _cambiar_estado_secuencia(
         ) from exc
 
 
-@router.post("/sequence/{sequence_id}/activate")
+@router.post("/sequence/{sequence_id}/activate", dependencies=[Depends(_require_operator)])
 async def activar_secuencia(sequence_id: str) -> dict[str, Any]:
     """Pone la secuencia en ACTIVE (no dispara envíos: ver `warning`)."""
     return await _cambiar_estado_secuencia(sequence_id, "ACTIVE")
 
 
-@router.post("/sequence/{sequence_id}/pause")
+@router.post("/sequence/{sequence_id}/pause", dependencies=[Depends(_require_operator)])
 async def pausar_secuencia(sequence_id: str) -> dict[str, Any]:
     """Pone la secuencia en PAUSED (sus steps dejan de considerarse activos)."""
     return await _cambiar_estado_secuencia(sequence_id, "PAUSED")
@@ -2047,7 +2074,7 @@ async def chequeo_set_stage(intake_id: str, body: _StageBody, request: Request) 
     return {"status": "OK", "intake_id": intake_id, "stage": stage}
 
 
-@router.get("/guaki/status")
+@router.get("/guaki/status", dependencies=[Depends(_require_operator)])
 async def guaki_status() -> dict[str, Any]:
     """Estado del servicio Guaki, consultado server-side (evita CORS).
 
