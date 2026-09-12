@@ -145,6 +145,15 @@ class Settings(BaseSettings):
     job_queue_backend: Literal["inprocess", "arq"] = "inprocess"
     job_max_attempts: int = 3
     job_worker_concurrency: int = 2
+    # Lease del worker: si su heartbeat no avanza en este margen, el job
+    # RUNNING se considera huérfano y vuelve a la cola.
+    job_stale_timeout_seconds: int = 300
+    job_heartbeat_interval_seconds: int = 15
+    # Backoff entre reintentos: base * 2^(intentos-1), con jitter +/-jitter y
+    # techo. Evita martillear a un proveedor que acaba de fallar.
+    job_backoff_base_seconds: float = 2.0
+    job_backoff_max_seconds: float = 600.0
+    job_backoff_jitter: float = 0.3
 
     # ---------------------------------------------------------------- logging
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

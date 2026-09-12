@@ -51,6 +51,15 @@ class Job(OwnedModel):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Lease del worker que tiene tomado el job. Sin esto, un proceso que muere
+    # deja el job en RUNNING para siempre y nadie sabe si sigue vivo. El
+    # heartbeat avanza mientras se procesa; si se vence, otro worker lo
+    # reclama (ver `JobService.recover_stale`).
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
@@ -61,6 +70,13 @@ class Job(OwnedModel):
             "status",
             "scheduled_at",
             postgresql_where=text("status IN ('QUEUED', 'RUNNING')"),
+        ),
+        # Reclaim de huérfanos: solo mira jobs RUNNING por heartbeat vencido.
+        Index(
+            "ix_jobs_running_heartbeat",
+            "status",
+            "heartbeat_at",
+            postgresql_where=text("status = 'RUNNING'"),
         ),
         Index("ix_jobs_type_created", "job_type", "created_at"),
     )

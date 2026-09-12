@@ -81,10 +81,26 @@ class UnauthorizedError(DomainError):
 
 
 class RateLimitedError(DomainError):
-    """Límite propio superado (envíos/día, requests al proveedor...)."""
+    """Límite propio superado (envíos/día, requests al proveedor...).
+
+    `retry_after` (segundos) lo usa el worker para reencolar el job cuando
+    vuelva a haber cupo, en vez de gastar un intento. Si es None, se aplica
+    backoff exponencial normal.
+    """
 
     code = "RATE_LIMITED"
     http_status = 429
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after: float | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, code=code, details=details)
+        self.retry_after = retry_after
 
 
 class ExternalServiceError(DomainError):
