@@ -1762,7 +1762,8 @@ async def website_intake(payload: WebsiteIntakeIn, request: Request) -> dict[str
     Flujo (todo vía PostgREST, sin sesión de BD):
       1. companies: upsert por dedupe_key (sha256 del email) → la empresa.
       2. contacts: contacto principal con source=WEBSITE.
-      3. leads: lead en stage "new", status NEW, source WEBSITE.
+      3. leads: lead OPEN en etapa inicial, con el servicio base canónico
+         (el esquema `crm` no tiene columna `source` en `leads`).
       4. tasks: tarea de revisión para el operador.
       5. activities: LEAD_CREATED con metadata del origen.
 
@@ -1866,61 +1867,82 @@ async def website_intake(payload: WebsiteIntakeIn, request: Request) -> dict[str
         )
     contact_id = contacto[0].get("id") if isinstance(contacto, list) else contacto.get("id")
 
-    # 3. Lead en la etapa inicial (stage_id ya validado en el paso 0).
-    lead = await pg_insert(
+    # 3. Lead en la etapa inicial. El esquema `crm` NO tiene columna `source` en
+    #    `leads`, su `status` usa el enum `lead_status` (sin 'NEW'; usamos 'OPEN')
+    #    y `service_id` es OBLIGATORIO (FK + unique con company_id). El código
+    #    anterior venía del esquema legacy y por eso nunca creaba el lead.
+    #    Resolvemos un servicio base canónico y reutilizamos el lead si la empresa
+    #    ya lo tenía (idempotencia ante reenvíos del formulario).
+    services = await pg_select("services", columns="id", order="created_at.asc", limit=1)
+    service_id = services[0]["id"] if services else None
+    if not service_id:
+        logger.error("intake_service_missing")
+        raise HTTPException(status_code=503, detail="Servicio base no configurado.")
+    existing_lead = await pg_select(
         "leads",
-        {
-            "company_id": company_id,
-            "contact_id": contact_id,
-            "stage_id": stage_id,
-            "status": "NEW",
-            "source": "WEBSITE",
-        },
+        columns="id",
+        filters={"company_id": company_id, "service_id": service_id},
+        limit=1,
     )
-    if not lead:
-        logger.error("intake_lead_failed", company=str(company_id))
-        raise HTTPException(status_code=502, detail="No se pudo registrar la solicitud.")
-    lead_id = lead[0].get("id") if isinstance(lead, list) else lead.get("id")
+    if existing_lead:
+        lead_id = existing_lead[0]["id"]
+    else:
+        lead = await pg_insert(
+            "leads",
+            {
+                "company_id": company_id,
+                "contact_id": contact_id,
+                "service_id": service_id,
+                "stage_id": stage_id,
+                "status": "OPEN",
+                "owner_id": "00000000-0000-4000-8000-000000000002",
+            },
+        )
+        if not lead:
+            logger.error("intake_lead_failed", company=str(company_id))
+            raise HTTPException(status_code=502, detail="No se pudo registrar la solicitud.")
+        lead_id = lead[0].get("id") if isinstance(lead, list) else lead.get("id")
 
-    # 4. Tarea de revisión (mismo título que usa el intake autenticado).
-    await pg_insert(
-        "tasks",
-        {
-            "lead_id": lead_id,
-            "contact_id": contact_id,
-            "title": "Intake Review",
-            "description": "Solicitud Business MRI desde veyrasoluciones.com. Revisar y clasificar.",
-            "priority": 1,
-        },
-    )
-
-    # 5. Activity con el contexto completo del formulario para el operador.
-    extras: dict[str, Any] = {}
-    if _clean(payload.sector, 120):
-        extras["sector"] = _clean(payload.sector, 120)
-    if _clean(payload.goal, 300):
-        extras["objetivo"] = _clean(payload.goal, 300)
-    if _clean(payload.bottleneck, 2000):
-        extras["cuello_de_botella"] = _clean(payload.bottleneck, 2000)
-    if _clean(payload.priority, 80):
-        extras["prioridad"] = _clean(payload.priority, 80)
-    if _clean(payload.budget, 60):
-        extras["presupuesto"] = _clean(payload.budget, 60)
-
-    await pg_insert(
-        "activities",
-        {
-            "lead_id": lead_id,
-            "contact_id": contact_id,
-            "company_id": company_id,
-            "activity_type": "LEAD_CREATED",
-            "actor_type": "SYSTEM",
-            "subject": "Lead creado desde el sitio web",
-            "body": proceso,
-            "is_system_generated": True,
-            "metadata": {"origen": "veyrasoluciones.com", "canal": "formulario-contacto", **extras},
-        },
-    )
+    # 4 + 5. Tarea de revisión y actividad. Son un plus operativo: si fallan, el
+    # lead ya quedó guardado y no debe revertir el alta del prospecto.
+    try:
+        await pg_insert(
+            "tasks",
+            {
+                "lead_id": lead_id,
+                "contact_id": contact_id,
+                "title": "Intake Review",
+                "description": "Solicitud Business MRI desde veyrasoluciones.com. Revisar y clasificar.",
+                "priority": 1,
+            },
+        )
+        extras: dict[str, Any] = {}
+        if _clean(payload.sector, 120):
+            extras["sector"] = _clean(payload.sector, 120)
+        if _clean(payload.goal, 300):
+            extras["objetivo"] = _clean(payload.goal, 300)
+        if _clean(payload.bottleneck, 2000):
+            extras["cuello_de_botella"] = _clean(payload.bottleneck, 2000)
+        if _clean(payload.priority, 80):
+            extras["prioridad"] = _clean(payload.priority, 80)
+        if _clean(payload.budget, 60):
+            extras["presupuesto"] = _clean(payload.budget, 60)
+        await pg_insert(
+            "activities",
+            {
+                "lead_id": lead_id,
+                "contact_id": contact_id,
+                "company_id": company_id,
+                "activity_type": "LEAD_CREATED",
+                "actor_type": "SYSTEM",
+                "subject": "Lead creado desde el sitio web",
+                "body": proceso,
+                "is_system_generated": True,
+                "metadata": {"origen": "veyrasoluciones.com", "canal": "formulario-contacto", **extras},
+            },
+        )
+    except Exception as _e:  # noqa: BLE001
+        logger.warning("intake_task_activity_failed", lead_id=str(lead_id), err=str(_e)[:160])
 
     logger.info(
         "intake_website_ok",

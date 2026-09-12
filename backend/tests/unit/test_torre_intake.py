@@ -7,8 +7,9 @@ tocar producción. Lo que se verifica:
 - Validación: nombre, email y descripción del reto son obligatorios.
 - Rate limit por IP: al 11º envío en la ventana responde 429.
 - El flujo llama a las tablas en el orden correcto y con los valores
-  esperados (companies con dedupe_key, contacts con source=WEBSITE, leads
-  en stage "new", task de revisión y activity LEAD_CREATED).
+  esperados (companies con dedupe_key, contacts con source=WEBSITE, lead OPEN
+  con el servicio base canónico — `crm.leads` no tiene columna `source` —, task
+  de revisión y activity LEAD_CREATED).
 """
 
 from __future__ import annotations
@@ -44,7 +45,12 @@ def _client(monkeypatch: Any) -> TestClient:
         table: str, **kwargs: Any
     ) -> list[dict[str, Any]]:
         calls.append(("select", {"table": table, **kwargs}))
-        return [{"id": "uuid-stage-new", "stage_key": "new", "owner_id": None}]
+        if table == "pipeline_stages":
+            return [{"id": "uuid-stage-new", "stage_key": "new", "owner_id": None}]
+        if table == "services":
+            return [{"id": "uuid-service-base"}]
+        # Sin lead previo: la empresa nueva debe generar un lead nuevo.
+        return []
 
     monkeypatch.setattr(torre_control, "get_settings", lambda: _FakeSettings())
     from app.core import postgrest_client as prc
@@ -99,7 +105,7 @@ class TestValidacion:
 
 
 class TestFlujo:
-    def test_crea_lead_con_source_website(self, monkeypatch: Any) -> None:
+    def test_crea_lead_open_con_servicio_base(self, monkeypatch: Any) -> None:
         client = _client(monkeypatch)
         r = client.post("/torre-control/intake", json=PAYLOAD)
         assert r.status_code == 201, r.text
@@ -120,11 +126,12 @@ class TestFlujo:
         assert contact["source"] == "WEBSITE"
         assert contact["is_primary"] is True
 
-        # leads en stage new con source WEBSITE
+        # lead OPEN con el servicio base canónico; `crm` no tiene columna `source`
         lead = inserts[1]["data"]
         assert lead["stage_id"] == "uuid-stage-new"
-        assert lead["source"] == "WEBSITE"
-        assert lead["status"] == "NEW"
+        assert lead["service_id"] == "uuid-service-base"
+        assert lead["status"] == "OPEN"
+        assert "source" not in lead
 
         # activity LEAD_CREATED con metadata del origen
         activity = inserts[3]["data"]
