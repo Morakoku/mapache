@@ -22,6 +22,28 @@ logger = get_logger(__name__)
 _SCHEDULER_OWNER_ID = "00000000-0000-4000-8000-000000000001"
 
 
+# --------------------------------------------------------------- esquema PostgREST
+# La app vive en el schema `crm` (separado de `public`, que mezcla otros sistemas).
+# PostgREST selecciona el schema con Accept-Profile (lectura) / Content-Profile (escritura).
+_PG_CRM = "crm"
+_CRM_TABLES = frozenset({
+    "activities", "app_settings", "audit_log", "call_logs", "call_scripts",
+    "companies", "company_signals", "company_socials", "company_sources",
+    "contacts", "conversation_messages", "conversations", "email_accounts",
+    "email_events", "email_links", "email_messages", "email_templates",
+    "follow_ups", "idempotency_events", "jobs", "lead_stage_history", "leads",
+    "pipeline_stages", "search_results", "search_runs", "searches",
+    "sequence_steps", "sequences", "services", "suppression_list", "tasks",
+})
+
+
+def _apply_profile(headers: dict[str, str], table: str) -> None:
+    """Crm para las tablas de la app; public para el resto (ej. veyra_intakes)."""
+    if table in _CRM_TABLES:
+        headers["Accept-Profile"] = _PG_CRM
+        headers["Content-Profile"] = _PG_CRM
+
+
 async def select(
     table: str,
     *,
@@ -43,6 +65,7 @@ async def select(
         "apikey": settings.supabase_service_role_key_value,
         "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
     }
+    _apply_profile(headers, table)
     params: dict[str, str] = {"select": columns}
     if filters:
         for key, value in filters.items():
@@ -88,6 +111,7 @@ async def pg_count_exact(
         "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
         "Prefer": "count=exact",
     }
+    _apply_profile(headers, table)
     params: dict[str, str] = {"select": "id", "limit": "1"}
     if filters:
         for key, value in filters.items():
@@ -132,6 +156,7 @@ async def insert(
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }
+    _apply_profile(headers, table)
     # PostgREST necesita el query param on_conflict para saber sobre qué
     # constraint hacer el merge; sin él, merge-duplicates responde 409
     # en vez de fusionar. companies deduplica por (owner_id, dedupe_key).
@@ -195,6 +220,7 @@ async def update(
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }
+    _apply_profile(headers, table)
     params: dict[str, str] = {}
     for key, value in filters.items():
         params[key] = f"eq.{value}"
@@ -227,6 +253,7 @@ async def delete(
         "apikey": settings.supabase_service_role_key_value,
         "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
     }
+    _apply_profile(headers, table)
     params: dict[str, str] = {}
     for key, value in filters.items():
         params[key] = f"eq.{value}"

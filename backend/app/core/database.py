@@ -40,7 +40,11 @@ def get_engine() -> AsyncEngine | None:
             return None
         # asyncpg no acepta sslmode en DSN; configurar SSL en connect_args
         connect_args = {
-            "server_settings": {"application_name": settings.app_name},
+            "server_settings": {
+                "application_name": settings.app_name,
+                # La app vive en el schema `crm` (public mezcla otros sistemas).
+                "search_path": "crm,public,extensions",
+            },
             # Compatible con poolers tipo pgbouncer/Supavisor (Supabase): sin
             # cache de sentencias preparadas. Es seguro tambien contra Postgres directo.
             "statement_cache_size": 0,

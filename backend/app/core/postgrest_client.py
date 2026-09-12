@@ -14,6 +14,15 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+from app.core.supabase_http import _CRM_TABLES, _PG_CRM
+
+
+def _apply_profile(headers: dict[str, str], table: str) -> None:
+    if table in _CRM_TABLES:
+        headers["Accept-Profile"] = _PG_CRM
+        headers["Content-Profile"] = _PG_CRM
+
+
 
 async def pg_count(table: str, filters: dict[str, str] | None = None) -> int:
     """Contar registros en una tabla."""
@@ -26,6 +35,7 @@ async def pg_count(table: str, filters: dict[str, str] | None = None) -> int:
         "apikey": settings.supabase_service_role_key_value,
         "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
     }
+    _apply_profile(headers, table)
     if filters:
         for key, value in filters.items():
             url += f"&{key}=eq.{value}"
@@ -71,6 +81,7 @@ async def pg_select(
         "apikey": settings.supabase_service_role_key_value,
         "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
     }
+    _apply_profile(headers, table)
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -97,6 +108,7 @@ async def pg_insert(table: str, data: dict[str, Any] | list[dict[str, Any]]) -> 
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }
+    _apply_profile(headers, table)
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -131,6 +143,7 @@ async def pg_insert_upsert(
         "Content-Type": "application/json",
         "Prefer": "return=representation,resolution=merge-duplicates",
     }
+    _apply_profile(headers, table)
     params: dict[str, str] = {}
     if on_conflict:
         params["on_conflict"] = on_conflict
@@ -163,6 +176,7 @@ async def pg_update(table: str, filters: dict[str, str], data: dict[str, Any]) -
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }
+    _apply_profile(headers, table)
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -191,6 +205,7 @@ async def pg_delete(table: str, filters: dict[str, str]) -> bool:
         "apikey": settings.supabase_service_role_key_value,
         "Authorization": f"Bearer {settings.supabase_service_role_key_value}",
     }
+    _apply_profile(headers, table)
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
