@@ -1910,7 +1910,7 @@ async def website_intake(payload: WebsiteIntakeIn, request: Request) -> dict[str
             "tasks",
             {
                 "lead_id": lead_id,
-                "contact_id": contact_id,
+                "company_id": company_id,
                 "title": "Intake Review",
                 "description": "Solicitud Business MRI desde veyrasoluciones.com. Revisar y clasificar.",
                 "priority": 1,
@@ -1934,10 +1934,9 @@ async def website_intake(payload: WebsiteIntakeIn, request: Request) -> dict[str
                 "contact_id": contact_id,
                 "company_id": company_id,
                 "activity_type": "LEAD_CREATED",
-                "actor_type": "SYSTEM",
-                "subject": "Lead creado desde el sitio web",
-                "body": proceso,
-                "is_system_generated": True,
+                "actor": "SYSTEM",
+                "title": "Lead creado desde el sitio web",
+                "description": proceso,
                 "metadata": {"origen": "veyrasoluciones.com", "canal": "formulario-contacto", **extras},
             },
         )

@@ -133,10 +133,11 @@ class TestFlujo:
         assert lead["status"] == "OPEN"
         assert "source" not in lead
 
-        # activity LEAD_CREATED con metadata del origen
+        # activity LEAD_CREATED (columnas reales de crm: actor/title/description)
         activity = inserts[3]["data"]
         assert activity["activity_type"] == "LEAD_CREATED"
-        assert activity["actor_type"] == "SYSTEM"
+        assert activity["actor"] == "SYSTEM"
+        assert activity["title"] == "Lead creado desde el sitio web"
         assert activity["metadata"]["origen"] == "veyrasoluciones.com"
 
     def test_empresa_upsert_con_dedupe_key_por_email(self, monkeypatch: Any) -> None:
