@@ -3,7 +3,8 @@
 Construye la app REAL (`create_app`) con `SERVICE_AUTH_ENABLED=true` y una clave
 de TEST, y demuestra que la barrera funciona de verdad:
 - 401: token ausente / inválido / expirado / client_id no permitido / nonce reusado.
-- 403: scope no permitido (SCOPE_NOT_ASSIGNED) y set de scopes inválido.
+- 403: operación no declarada (SCOPE_NOT_ASSIGNED), scope declarado pero no
+  concedido (SCOPE_MISSING) y set de scopes inválido (SCOPE_INVALID_SET).
 - 200/404: el contrato (dispatch + jobs de Hermes) pasa la barrera con el scope
   correcto; el resto de /api/v1 queda DENY.
 - /health y /health/ready siguen públicos.
@@ -128,8 +129,12 @@ class TestAuthorizationL2:
                 method, path, headers={"Authorization": f"Bearer {_token()}"}
             )
             assert r.status_code == 403, f"{method} {path} debía ser DENY"
+            # SCOPE_NOT_ASSIGNED: la operación no está declarada en el contrato
+            # de servicio. SCOPE_MISSING: está declarada (p. ej. companies es
+            # del contrato Guaki) pero la identidad no tiene el scope.
             assert r.json()["error"]["code"] in {
                 "SCOPE_NOT_ASSIGNED",
+                "SCOPE_MISSING",
                 "SCOPE_INVALID_SET",
             }
 
