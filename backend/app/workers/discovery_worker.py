@@ -65,12 +65,8 @@ async def run_discovery(job_id: uuid.UUID, payload: dict[str, Any]) -> None:
         await jobs.mark_running(job_id)
         await session.commit()
 
-        search = await SearchService(session).get_or_404(search_id)
-        if not search.is_active:
-            await jobs.mark_failed(job_id, "Búsqueda inactiva")
-            return
-
-        # Lazy import for scraper provider
+        # Lazy import for scraper provider. Debe resolverse ANTES del try grande:
+        # el `except ProviderBlockedError` posterior necesita el nombre ligado.
         try:
             from app.scrapers.base import ProviderBlockedError
             from app.scrapers.registry import build_provider
@@ -79,18 +75,27 @@ async def run_discovery(job_id: uuid.UUID, payload: dict[str, Any]) -> None:
             logger.error("scraper_import_failed", error=str(e))
             return
 
-        provider_kwargs: dict[str, Any] = {}
-        if provider_name in {"GOOGLE_PLACES_API", "google_places_api"}:
-            settings = await SettingsService(session).get_or_404("scraper")
-            api_key = decrypt(settings.get("google_places_key", ""))
-            if not api_key:
-                await jobs.mark_failed(job_id, "Google Places API key no configurada")
-                return
-            provider_kwargs["google_places_key"] = api_key
-
-        provider = build_provider(provider_name, **provider_kwargs)
-
+        # Todo el cuerpo va bajo el mismo try: un fallo temprano (p. ej. la
+        # búsqueda no existe) también debe dejar el job en FAILED. El
+        # `InProcessQueue` solo registra `job_failed`; persistir el estado es
+        # responsabilidad del handler.
         try:
+            search = await SearchService(session).get_or_404(search_id)
+            if not search.is_active:
+                await jobs.mark_failed(job_id, "Búsqueda inactiva")
+                return
+
+            provider_kwargs: dict[str, Any] = {}
+            if provider_name in {"GOOGLE_PLACES_API", "google_places_api"}:
+                settings = await SettingsService(session).get_or_404("scraper")
+                api_key = decrypt(settings.get("google_places_key", ""))
+                if not api_key:
+                    await jobs.mark_failed(job_id, "Google Places API key no configurada")
+                    return
+                provider_kwargs["google_places_key"] = api_key
+
+            provider = build_provider(provider_name, **provider_kwargs)
+
             async with session_scope() as s:
                 companies_svc = CompanyService(s)
                 saved = 0
