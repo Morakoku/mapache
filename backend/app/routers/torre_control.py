@@ -187,7 +187,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 </div>
 <div class="refresh-bar">
 <div style="display:flex;gap:10px">
-<button class="refresh-btn" onclick="loadAll();loadPipeline();loadWhatsApp();loadTemplates();loadSequenceStatus()">🔄 Refrescar</button>
+<button class="refresh-btn" onclick="loadAll();loadPipeline();loadWhatsApp();loadTemplates();loadSequenceStatus();loadTorre()">🔄 Refrescar</button>
 <button class="refresh-btn" onclick="toggleAuto()">⏱ <span id="auto-txt">ON</span></button>
 <a class="refresh-btn" href="/torre-control/chequeo" style="text-decoration:none;color:var(--accent);border-color:var(--accent)">📋 Chequeo Express</a>
 </div>
@@ -197,6 +197,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 <button class="tab active" role="tab" aria-selected="true" data-tab="mapache" onclick="showTab('mapache')">Mapache</button>
 <button class="tab" role="tab" aria-selected="false" data-tab="veyra" onclick="showTab('veyra')">Veyra</button>
 <button class="tab" role="tab" aria-selected="false" data-tab="guaki" onclick="showTab('guaki')">Guaki</button>
+<button class="tab" role="tab" aria-selected="false" data-tab="torre" onclick="showTab('torre')">🗼 Portafolio</button>
 </div>
 <div class="tab-panel active" id="tab-mapache" role="tabpanel" aria-hidden="false">
 <div class="grid" id="services"></div>
@@ -291,6 +292,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 <div class="card">
 <div class="card-header"><span class="card-title">Estado del servicio Guaki</span></div>
 <div id="guaki-body"><div class="card-sub">Cargando...</div></div>
+</div>
+</div>
+<div class="tab-panel" id="tab-torre" role="tabpanel" aria-hidden="true">
+<div class="card" style="margin-bottom:30px">
+<div class="card-header"><span class="card-title">🗼 Trinidad — Portafolio</span><span id="t-status" class="pill warn">Cargando torre...</span></div>
+<p class="tab-note">Estado del portafolio completo (Guaki · Veyra · Brenda · Infra), leído en vivo del PC: hermes boards + Postiz + sondas. Regenerar: <code>node guaki/scripts/torre.mjs</code> (cron 07:00). Fuente de verdad: <code>Trinidad/TORRE.md</code></p>
+<div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="t-meta">--</div>
+<div class="grid" id="t-boards" style="margin-bottom:14px"></div>
+<div id="t-probes" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
+<div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Cola humana (Edwin) — por lo que destraba misiones</div>
+<div id="t-humans" style="font-size:13px;line-height:1.9"></div>
 </div>
 </div>
 <!-- Modal: preview de plantilla. sandbox SIN allow-scripts: las plantillas
@@ -715,6 +727,7 @@ function showTab(name){
   document.querySelectorAll('.tab').forEach(b=>{ const on=b.getAttribute('data-tab')===name; b.classList.toggle('active',on); b.setAttribute('aria-selected', on?'true':'false'); });
   try{ localStorage.setItem('torre_tab', name); }catch(_){}
   if(name==='guaki') checkGuaki();
+  if(name==='torre') loadTorre();
 }
 function initTab(){
   let t='mapache';
@@ -749,6 +762,33 @@ async function checkGuaki(){
   }
 }
 initTab();
+// ---- Portafolio Trinidad: torre local (torre.mjs -> torre-serve.mjs :7788) ----
+async function loadTorre(){
+  const st=document.getElementById('t-status');
+  if(!st)return;
+  try{
+    const d=await (await fetch('http://127.0.0.1:7788/torre.json',{cache:'no-store'})).json();
+    if(!d||!d.boards)throw new Error('formato inesperado');
+    st.textContent='Torre viva';st.className='pill on';
+    document.getElementById('t-meta').textContent='Generada: '+new Date(d.generated_at).toLocaleString('es-CO')+' · proxima auto-regeneracion: cron Hermes 07:00';
+    const names={guaki:'🥑 Guaki',veyra:'🧭 Veyra',brenda:'💅 Brenda',cveliz:'Cveliz',sielan:'Sielan',lanza:'Lanza',atlas:'Atlas',default:'⚙️ Infra'};
+    document.getElementById('t-boards').innerHTML=Object.entries(d.boards).filter(([k,v])=>!v.error&&(v.open||v.done||v.leads)).map(([k,v])=>`<div class="card"><div class="card-title">${names[k]||k}</div><div class="card-value" style="font-size:22px">${v.open} abiertas</div><div class="card-sub">${v.done} done${v.leads?` · ${v.leads} LEADs`:''}</div></div>`).join('')||'<div class="card-sub">sin tableros</div>';
+    document.getElementById('t-probes').innerHTML=Object.entries(d.probes||{}).map(([k,p])=>{const ok=p.ok&&p.status<400;const warn=p.ok&&p.status>=400&&p.status<500;return`<span class="pill ${ok?'on':warn?'warn':'off'}" title="${k}">${k.replace('guaki.online','🥑').replace('Torre Mapache (Vercel)','🦝').replace('Postiz API local','📮')} ${p.status}</span>`}).join('');
+    const postiz=d.postiz||{};const ch=(postiz.channels||[]).length;
+    const items=[];
+    if(ch===0)items.push('🔴 <b>IGP1</b> — conectar Instagram en Postiz (checklist Meta en TORRE.md) · destraba IGP2 (11 drafts) + IGP3 + AB1');
+    else items.push(`🟢 Canal IG conectado (${ch}) — falta volcar drafts (IGP2)`);
+    for(const x of (d.human_queue||[]).slice(0,8))items.push(`⚪ [${x.board}] ${x.title}`);
+    for(const[k,v]of Object.entries(d.lead_counts||{}))items.push(`📣 ${v} × ${k} (rutina 15/dia)`);
+    const c=d.content||{};
+    items.push(`🎨 ${c.posts||0} posts · ${c.stories||0} historias · ${c.reels||0} reels (falta audio) · ${c.drafts||0} drafts listos`);
+    document.getElementById('t-humans').innerHTML=items.map(i=>`<div>${i}</div>`).join('');
+    log('Torre portafolio OK','ok');
+  }catch(e){
+    st.textContent='Torre local caída';st.className='pill warn';
+    document.getElementById('t-humans').innerHTML='<div style="color:var(--yellow)">No hay servidor de torre en 127.0.0.1:7788 (normal si el PC esta reiniciado).<br>Arrancar: <code>node C:\\Users\\edwin\\Documents\\Trinidad\\guaki\\scripts\\torre-serve.mjs</code> — o espera al cron de las 07:00 que lo levanta solo.</div>';
+  }
+}
 // Escape cierra SOLO el preview: el editor se cierra por sus botones para
 // no descartar ediciones a medio hacer con una tecla accidental.
 document.addEventListener('keydown',e=>{if(e.key==='Escape')pvClose()});
