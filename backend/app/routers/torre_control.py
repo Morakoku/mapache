@@ -520,7 +520,7 @@ return`<div class="tpl-item${inact}">
 <div style="min-width:0;flex:1">
 <div class="tpl-name">${esc(t.name)}</div>
 <div class="tpl-subject">${esc(t.subject)||'(sin asunto)'}</div>
-<div class="tpl-meta"><span class="tpl-cat">${esc(t.category||'Sin categoría')}</span> · usos: ${t.usage_count??0} · último uso: ${t.last_used_at?esc(String(t.last_used_at).slice(0,10)):'nunca'}${t.is_active?'':'<span class="tpl-inactive">INACTIVA</span>'}</div>
+      <div class="tpl-meta"><span class="tpl-cat">${esc(t.category||'Sin categoría')}</span> · usos: ${t.times_used??0}${t.is_active?'':'<span class="tpl-inactive">INACTIVA</span>'}</div>
 </div>
 <div class="tpl-actions">
 <button class="btn btn-sm btn-outline" onclick="tplPreview('${t.id}')">Ver</button>
@@ -876,7 +876,9 @@ async def status() -> dict[str, Any]:
 
 
 @router.get("/metrics")
-async def metrics() -> dict[str, Any]:
+async def metrics(request: Request) -> dict[str, Any]:
+    if not _chequeo_token_ok(request):
+        raise HTTPException(status_code=401, detail="Token de operador requerido.")
     """Métricas de volumen con conteo exacto (Prefer: count=exact).
 
     pg_count satura en 1000: PostgREST de Supabase tiene max-rows=1000 por
@@ -1316,7 +1318,7 @@ async def contact_whatsapp_attempt(
 _PLACEHOLDERS_PERSONALIZACION = ("[Nombre]", "[sector de la empresa]")
 
 # Columnas ligeras para el listado (sin bodies).
-_COLUMNS_LISTADO = "id,name,subject,category,is_active,usage_count,last_used_at"
+_COLUMNS_LISTADO = "id,name,subject,category,is_active,times_used"
 
 # Advertencia operativa: activar la secuencia no programa nada por sí sola.
 _ADVERTENCIA_ACTIVACION = (
@@ -1398,7 +1400,7 @@ async def obtener_template(template_id: str) -> dict[str, Any]:
     try:
         filas = await pg_select(
             "email_templates",
-            columns="id,name,subject,body_html,body_text,category,is_active,usage_count,last_used_at",
+            columns="id,name,subject,body_html,body_text,category,is_active,times_used",
             filters={"id": template_id},
             limit=1,
         )
@@ -1523,14 +1525,14 @@ async def estado_secuencia() -> dict[str, Any]:
     try:
         seqs = await pg_select(
             "sequences",
-            columns="id,name,description,status,total_steps,is_active",
+            columns="id,name,is_active,max_steps,stop_on_reply",
             filters={"id": _SEQUENCE_VEYRA_ID},
             limit=1,
         )
         if not seqs:
             seqs = await pg_select(
                 "sequences",
-                columns="id,name,description,status,total_steps,is_active",
+                columns="id,name,is_active,max_steps,stop_on_reply",
                 filters={"name": _SEQUENCE_VEYRA_NOMBRE},
                 limit=1,
             )
@@ -1542,15 +1544,16 @@ async def estado_secuencia() -> dict[str, Any]:
             return salida
 
         seq = seqs[0]
+        seq["status"] = "ACTIVE" if seq.get("is_active") else "PAUSED"
         pasos = await pg_select(
             "sequence_steps",
-            columns="id,position,name,wait_interval,wait_unit,email_template_id",
+            columns="id,step_number,template_id,delay_days,delay_hours",
             filters={"sequence_id": seq["id"]},
-            order="position.asc",
+            order="step_number.asc",
             limit=50,
         )
 
-        ids = {p.get("email_template_id") for p in pasos if p.get("email_template_id")}
+        ids = {p.get("template_id") for p in pasos if p.get("template_id")}
         asuntos: dict[str, str] = {}
         if ids:
             plantillas = await pg_select(
@@ -1565,16 +1568,16 @@ async def estado_secuencia() -> dict[str, Any]:
         salida["sequence"] = seq
         salida["steps"] = [
             {
-                "position": p.get("position"),
-                "name": p.get("name"),
-                "wait_interval": p.get("wait_interval"),
-                "wait_unit": p.get("wait_unit"),
-                "email_template_id": p.get("email_template_id"),
-                "template_subject": asuntos.get(p.get("email_template_id")),
+                "position": p.get("step_number"),
+                "name": "",
+                "wait_interval": p.get("delay_days"),
+                "wait_unit": "DAY",
+                "email_template_id": p.get("template_id"),
+                "template_subject": asuntos.get(p.get("template_id")),
             }
             for p in pasos
         ]
-        salida["total_steps"] = seq.get("total_steps") or len(pasos)
+        salida["total_steps"] = seq.get("max_steps") or len(pasos)
     except Exception as exc:
         logger.error("sequence_status_error", error=str(exc))
         salida["error"] = str(exc)
@@ -1596,7 +1599,7 @@ async def _cambiar_estado_secuencia(
     try:
         seqs = await pg_select(
             "sequences",
-            columns="id,name,status,total_steps,is_active",
+            columns="id,name,is_active,max_steps",
             filters={"id": sequence_id},
             limit=1,
         )
@@ -1605,14 +1608,16 @@ async def _cambiar_estado_secuencia(
                 status_code=404, detail=f"Secuencia {sequence_id} no encontrada"
             )
 
-        if seqs[0].get("status") == nuevo_estado:
+        activo = nuevo_estado == "ACTIVE"
+        if bool(seqs[0].get("is_active")) == activo:
+            seqs[0]["status"] = "ACTIVE" if activo else "PAUSED"
             respuesta: dict[str, Any] = {"sequence": seqs[0], "changed": False}
-            if nuevo_estado == "ACTIVE":
+            if activo:
                 respuesta["warning"] = _ADVERTENCIA_ACTIVACION
             return respuesta
 
         actualizadas = await pg_update(
-            "sequences", {"id": sequence_id}, {"status": nuevo_estado}
+            "sequences", {"id": sequence_id}, {"is_active": activo}
         )
         if not actualizadas:
             logger.error(
@@ -1631,6 +1636,7 @@ async def _cambiar_estado_secuencia(
             nombre=seqs[0].get("name"),
             estado=nuevo_estado,
         )
+        actualizadas[0]["status"] = "ACTIVE" if actualizadas[0].get("is_active") else "PAUSED"
         respuesta = {"sequence": actualizadas[0], "changed": True}
         if nuevo_estado == "ACTIVE":
             respuesta["warning"] = _ADVERTENCIA_ACTIVACION
