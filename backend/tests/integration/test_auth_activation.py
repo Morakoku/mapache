@@ -50,7 +50,7 @@ def _auth_settings() -> Settings:
         app_name="test",
         environment="test",
         debug=False,
-        database_url="postgresql://crm:crm@localhost:5435/crm_test",
+        database_url="postgresql://crm:crm@localhost:5434/crm_test",
         encryption_key="x" * 44,
         secret_key="test-secret-key",
         service_auth_enabled=True,

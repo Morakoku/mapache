@@ -46,7 +46,7 @@ def _settings(enabled: bool = True, key: str | None = TEST_KEY) -> Settings:
         app_name="test",
         environment="test",
         debug=False,
-        database_url="postgresql://crm:crm@localhost:5435/crm_test",
+        database_url="postgresql://crm:crm@localhost:5434/crm_test",
         encryption_key="x" * 44,  # 44 chars => 32 bytes Fernet
         secret_key="test-secret-key",
         service_auth_enabled=enabled,
