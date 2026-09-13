@@ -729,14 +729,20 @@ class ClienteSupabase:
     def registrar_activity(
         self, lead_id: str, owner_id: str | None, dia: int, resend_id: str, email_enmascarado: str
     ) -> None:
-        """Activity NOTE-visible en el timeline con {warmup_day, resend_id}."""
+        """Activity visible en el timeline con {warmup_day, resend_id}.
+
+        Columnas REALES de activities: actor (no actor_type), title/description
+        (no subject/body), metadata; no existe is_system_generated (se marca
+        con actor=SYSTEM). Enviar columnas inventadas daba PGRST204 y dejaba
+        la bitacora del warm-up vacia.
+        """
         payload = {
             "lead_id": lead_id,
             "owner_id": owner_id,
             "activity_type": "EMAIL_SENT",
-            "actor_type": "SYSTEM",
-            "subject": f"Warm-up día {dia}: email enviado a {email_enmascarado}",
-            "body": (
+            "actor": "SYSTEM",
+            "title": f"Warm-up día {dia}: email enviado a {email_enmascarado}",
+            "description": (
                 f"Email 1 de la secuencia Veyra MRI Outbound 30d "
                 f"('¿Te escribo o prefieres que no?') enviado vía Resend desde "
                 f"edwin@veyrasoluciones.com. Destinatario: {email_enmascarado}. "
@@ -748,7 +754,6 @@ class ClienteSupabase:
                 "canal": "warmup_resend",
                 "plantilla": NOMBRE_PLANTILLA_ESPERADO,
             },
-            "is_system_generated": True,
         }
         respuesta = self._request("POST", "/rest/v1/activities", json_body=[payload])
         if respuesta.status_code not in (200, 201):
