@@ -211,6 +211,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 </div>
 </div>
 <div class="card" style="margin-bottom:30px">
+<div class="card-header"><span class="card-title">🔻 Embudo por etapa (tablero real)</span><span id="fn-pill" class="pill warn">--</span></div>
+<div id="fn-bars" style="display:flex;flex-direction:column;gap:8px;margin-top:10px"></div>
+</div>
+<div class="card" style="margin-bottom:30px">
+<div class="card-header"><span class="card-title">📜 Actividad reciente</span><span class="card-sub" id="af-meta"></span></div>
+<div id="af-list" style="font-size:13px;line-height:1.7;margin-top:8px"><span class="card-sub">Cargando…</span></div>
+</div>
+<div class="card" style="margin-bottom:30px">
 <div class="card-header"><span class="card-title">📊 Métricas</span></div>
 <div class="grid" style="margin-top:12px">
 <div class="card"><div class="card-sub">Empresas</div><div class="card-value" id="m-companies">--</div></div>
@@ -743,6 +751,25 @@ document.getElementById('dv-est').textContent=dvPaused?'⚠ AUTOMATIZACIONES EN 
 }else if(au&&au.error){document.getElementById('dv-est').textContent='app_settings: '+au.error;}
 }catch(e){document.getElementById('dv-line').textContent='Error entregabilidad: '+e.message;}
 }
+async function loadEmbudo(){
+try{
+const d=await fetch(API+'/funnel',{cache:'no-store'}).then(r=>r.json());
+if(!d.ok)throw new Error(d.error||'funnel');
+const max=Math.max(1,...d.steps.map(s=>s.count));
+document.getElementById('fn-pill').textContent=d.total+' leads';
+document.getElementById('fn-pill').className='pill on';
+document.getElementById('fn-bars').innerHTML=d.steps.map(s=>`<div style="display:flex;align-items:center;gap:10px"><span style="width:150px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">${s.name}</span><div style="flex:1;height:14px;background:#1a1a1a;border-radius:7px;overflow:hidden"><div style="height:100%;width:${Math.round(s.count/max*100)}%;background:linear-gradient(90deg,var(--accent),#ff9e6b)"></div></div><strong style="width:34px;text-align:right;font-size:13px">${s.count}</strong></div>`).join('')+(d.extras&&Object.keys(d.extras).length?`<div class="card-sub" style="margin-top:6px">Sin etapa/tablero externo: ${JSON.stringify(d.extras)}</div>`:'');
+}catch(e){document.getElementById('fn-pill').textContent='--';document.getElementById('fn-bars').innerHTML='<span class="card-sub">Embudo no disponible: '+e.message+'</span>';}
+}
+async function loadFeed(){
+try{
+const d=await fetch(API+'/activity-feed?limit=15',{cache:'no-store'}).then(r=>r.json());
+if(!d.ok)throw new Error(d.error||'feed');
+const icon=(t)=>({'EMAIL_SENT':'📧','EMAIL_BOUNCED':'⛔','EMAIL_OPENED':'👁','STAGE_CHANGED':'➡️','LEAD_CREATED':'✨','COMPANY_FOUND':'🏢','EMAIL_REPLIED':'💬','FOLLOWUP_SENT':'🔁','NOTE':'📝'}[t]||'·');
+document.getElementById('af-meta').textContent=d.items.length+' eventos';
+document.getElementById('af-list').innerHTML=d.items.length?d.items.map(i=>`<div style="display:flex;gap:8px;align-items:baseline;border-bottom:1px solid var(--border);padding:5px 0"><span>${icon(i.type)}</span><span style="flex:1">${i.title||i.type}${i.company?` — <strong style="color:var(--accent)">${i.company}</strong>`:''}</span><span style="color:var(--muted);font-size:11px;white-space:nowrap">${new Date(i.occurred_at).toLocaleString('es-CO',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span></div>`).join(''):'<span class="card-sub">Sin actividad registrada todavía (el espejo de envíos se estrena hoy: los proximos runs ya dejan bitacora).</span>';
+}catch(e){document.getElementById('af-list').innerHTML='<span class="card-sub">Feed no disponible: '+e.message+'</span>';}
+}
 async function togglePausa(){
 try{
 const r=await fetch(API+'/automations/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paused:!dvPaused})});
@@ -772,7 +799,9 @@ loadWhatsApp();
 loadTemplates();
 loadSequenceStatus();
 loadEntregabilidad();
-autoT=setInterval(()=>{loadAll();loadEntregabilidad()},10000);
+loadEmbudo();
+loadFeed();
+autoT=setInterval(()=>{loadAll();loadEntregabilidad();loadEmbudo();loadFeed()},10000);
 }else{gateShow();}
 
 // ---- Pestañas por marca: Mapache · Veyra · Guaki -------------------------
@@ -1885,6 +1914,84 @@ async def cambiar_limite_envio(body: _LimiteBody) -> dict[str, Any]:
     if not filas:
         raise HTTPException(status_code=409, detail="No se pudo actualizar app_settings.")
     return {"ok": True, "daily_send_limit": body.daily_send_limit}
+
+
+@router.get("/funnel", dependencies=[Depends(_require_operator)])
+async def embudo() -> dict[str, Any]:
+    """Embudo por etapa REAL del tablero (pipeline_stages, no etapas inventadas).
+
+    Cuenta leads agrupados por el stage_type de su etapa actual; las etapas del
+    codigo (REPLIED→…→WON) salen de la DB, asi que renombrar/agregar columnas
+    en el Kanban se refleja aqui sin tocar este endpoint.
+    """
+    from app.core.supabase_http import select as pg_select
+
+    etapas = await pg_select(
+        "pipeline_stages", columns="id,stage_type,name,position", order="position.asc"
+    )
+    leads = await pg_select("leads", columns="stage_id", limit=5000)
+    por_id = {str(s["id"]): s for s in etapas}
+    conteo: dict[str, int] = {}
+    for lead in leads:
+        etapa = por_id.get(str(lead.get("stage_id") or ""))
+        clave = etapa["stage_type"] if etapa else "SIN_ETAPA"
+        conteo[clave] = conteo.get(clave, 0) + 1
+    pasos = [
+        {
+            "stage_type": s["stage_type"],
+            "name": s["name"],
+            "count": conteo.get(s["stage_type"], 0),
+        }
+        for s in etapas
+    ]
+    extras = {
+        k: v for k, v in conteo.items() if k not in {s["stage_type"] for s in etapas}
+    }
+    return {"ok": True, "total": len(leads), "steps": pasos, "extras": extras}
+
+
+@router.get("/activity-feed", dependencies=[Depends(_require_operator)])
+async def feed_actividad(limit: int = 30) -> dict[str, Any]:
+    """Que paso realmente (actividades recientes con empresa del lead).
+
+    El drill-down minimo: cada item trae lead_id + company_name para poder
+    rastrear QUE paso con ese prospecto sin abrir el CRM aparte.
+    """
+    from app.core.supabase_http import select as pg_select
+
+    filas = await pg_select(
+        "activities",
+        columns="id,activity_type,title,description,occurred_at,lead_id,actor",
+        order="occurred_at.desc",
+        limit=max(1, min(int(limit or 30), 50)),
+    )
+    lead_ids = {str(f.get("lead_id")) for f in filas if f.get("lead_id")}
+    empresa_por_lead: dict[str, str] = {}
+    if lead_ids:
+        leads = await pg_select("leads", columns="id,company_id", limit=5000)
+        company_ids = {
+            str(l.get("company_id")) for l in leads if str(l.get("id")) in lead_ids and l.get("company_id")
+        }
+        nombres: dict[str, str] = {}
+        if company_ids:
+            companies = await pg_select("companies", columns="id,name", limit=5000)
+            nombres = {str(c["id"]): c.get("name", "") for c in companies if str(c["id"]) in company_ids}
+        for l in leads:
+            if str(l.get("id")) in lead_ids:
+                empresa_por_lead[str(l["id"])] = nombres.get(str(l.get("company_id") or ""), "")
+    items = [
+        {
+            "id": f["id"],
+            "type": f.get("activity_type"),
+            "title": f.get("title"),
+            "occurred_at": f.get("occurred_at"),
+            "actor": f.get("actor"),
+            "lead_id": f.get("lead_id"),
+            "company": empresa_por_lead.get(str(f.get("lead_id") or ""), None),
+        }
+        for f in filas
+    ]
+    return {"ok": True, "items": items}
 
 
 # ──────────────────────────────────────────────────────────────────────────
