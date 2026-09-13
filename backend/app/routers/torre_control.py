@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import re
 import threading
@@ -69,7 +70,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     ::-webkit-scrollbar-thumb:hover{background:#3a3a3a}
     @media (prefers-reduced-motion: reduce){*,*::before,*::after{transition-duration:.01ms !important;animation-duration:.01ms !important;animation-iteration-count:1 !important}}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;background:var(--bg);color:var(--fg);min-height:100vh;padding:20px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;color:var(--fg);min-height:100vh;padding:20px;background:#0a0a0a radial-gradient(1200px 600px at 85% -10%,rgba(255,107,53,.08),transparent),radial-gradient(900px 500px at -10% 30%,rgba(0,200,83,.06),transparent),radial-gradient(700px 400px at 60% 110%,rgba(41,121,255,.06),transparent) fixed}
 .header{display:flex;align-items:center;justify-content:space-between;padding:20px 0;border-bottom:1px solid var(--border);margin-bottom:30px;flex-wrap:wrap;gap:15px}
 .header h1{font-size:24px;font-weight:700}
 .header .logo{color:var(--accent)}
@@ -78,8 +79,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 .pill.off{background:rgba(255,23,68,.15);color:var(--red);border:1px solid var(--red)}
 .pill.warn{background:rgba(255,214,0,.15);color:var(--yellow);border:1px solid var(--yellow)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-bottom:30px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color .2s}
+.card{background:rgba(255,255,255,.045);backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);border:1px solid rgba(255,255,255,.09);border-top-color:rgba(255,255,255,.16);border-radius:14px;padding:24px;transition:border-color .2s;box-shadow:0 18px 50px rgba(0,0,0,.35)}
 .card:hover{border-color:var(--accent)}
+@media (prefers-reduced-transparency: reduce){.card{background:#111;backdrop-filter:none}}
 .card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .card-title{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
 .card-value{font-size:32px;font-weight:700;margin-bottom:4px}
@@ -310,6 +312,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 <div class="card-header"><span class="card-title">Estado del servicio Guaki</span></div>
 <div id="guaki-body"><div class="card-sub">Cargando...</div></div>
 </div>
+<div class="card" style="margin-top:30px">
+<div class="card-header"><span class="card-title">📲 Cola WhatsApp Guaki (leads por contactar)</span><span id="wq-pill" class="pill warn">--</span></div>
+<div class="card-sub" style="margin-bottom:12px">Pendientes primero. Al marcar Contactado o Número erróneo el lead sale de la cola y la lista avanza sola.</div>
+<div id="wq-list"></div>
+<div class="card-sub" id="wq-done" style="margin-top:10px"></div>
+</div>
+<div class="card" style="margin-top:30px">
+<div class="card-header"><span class="card-title">🔍 Fichas en auditoría (clientes Guaki)</span><span id="fa-pill" class="pill warn">--</span></div>
+<div class="card-sub" style="margin-bottom:12px">Contenido publicado por comerciantes esperando revisión. Decidir: <a href="https://guaki.online/admin/dashboard" target="_blank" rel="noopener" style="color:var(--accent)">panel admin Guaki →</a></div>
+<div id="fa-list"></div>
+</div>
 </div>
 <div class="tab-panel" id="tab-torre" role="tabpanel" aria-hidden="true">
 <div class="card" style="margin-bottom:30px">
@@ -438,6 +451,16 @@ log('WhatsApp: '+d.total+' contactables','ok');
 }catch(e){log('WhatsApp: '+e.message,'err')}
 }
 function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML}
+async function waWrong(leadId){
+if(!confirm('¿Número erróneo? El lead se DESCALIFICA en el CRM (dispar de verdad, no visual) y sale de la cola.'))return;
+try{
+const r=await fetch(API+`/contact-whatsapp/${leadId}/wrong`,{method:'POST'});
+if(!r.ok)throw new Error('HTTP '+r.status);
+waData=waData.filter(l=>l.lead_id!==leadId);
+renderWhatsApp();
+log('Lead descalificado por número erróneo','warn');
+}catch(e){log('wrong: '+e.message,'err')}
+}
 function renderWhatsApp(){
 const el=document.getElementById('wa-list');
 if(!waData.length){el.innerHTML='<div class="card-sub">No hay leads con teléfono por ahora.</div>';return}
@@ -453,6 +476,7 @@ return`<div class="wa-item${done?' done':''}" id="wa-${l.lead_id}">
 <div class="wa-actions">
 <button class="btn btn-sm btn-accent" onclick="waCopys('${l.lead_id}')">Generar copys</button>
 <button class="btn btn-sm btn-outline" id="wa-mark-${l.lead_id}" onclick="waMark('${l.lead_id}')" ${done?'disabled':''}>${done?'Contactado ✓':'Marcar contactado'}</button>
+<button class="btn btn-sm btn-off" onclick="waWrong('${l.lead_id}')">☎ Número erróneo</button>
 </div>
 </div>
 <div class="wa-panel" id="wa-panel-${l.lead_id}"${st.open?' data-open="1"':''}>
@@ -788,6 +812,46 @@ log('Cupo diario → '+v,'ok');
 await loadEntregabilidad();
 }catch(e){log('Límite: '+e.message,'err');}
 }
+async function loadWaQueue(){
+const el=document.getElementById('wq-list');if(!el)return;
+try{
+const d=await (await fetch(API+'/whatsapp-queue?project=guaki',{cache:'no-store'})).json();
+if(!d.ok)throw new Error(d.error||'queue');
+const p=document.getElementById('wq-pill');
+p.textContent=d.pendientes.length+' pendientes';p.className='pill '+(d.pendientes.length?'warn':'on');
+el.innerHTML=d.pendientes.length?d.pendientes.map(i=>`<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px">
+<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+<div><strong>${esc(i.name)}</strong> <span class="card-sub">${esc(i.zone||'')}</span></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<a class="btn btn-sm btn-on" style="text-decoration:none" href="${i.wa_link}" target="_blank" rel="noopener">✆ Abrir WhatsApp</a>
+<button class="btn btn-sm btn-outline" onclick="guakiWaAct('${i.id}','contacted')">Contactado</button>
+<button class="btn btn-sm btn-off" onclick="guakiWaAct('${i.id}','wrong')">☎ Erróneo</button>
+</div></div></div>`).join(''):'<div class="card-sub" style="color:var(--green)">✓ Cola del día completada. Mañana entra la siguiente tanda (30/día).</div>';
+const done=document.getElementById('wq-done');
+done.textContent=d.resueltos.length?('Resueltos recientes: '+d.resueltos.map(x=>x.id+'→'+x.status).join(', ')):'';
+}catch(e){el.innerHTML='<div class="card-sub">Cola no disponible: '+e.message+'</div>';}
+}
+async function guakiWaAct(id,action){
+try{
+const r=await fetch(API+`/whatsapp-queue/${id}/action`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});
+if(!r.ok)throw new Error('HTTP '+r.status);
+log('Cola guaki: '+id+' → '+action,action==='wrong'?'warn':'ok');
+await loadWaQueue();
+}catch(e){log('cola: '+e.message,'err')}
+}
+async function loadFichas(){
+const el=document.getElementById('fa-list');if(!el)return;
+try{
+const d=await (await fetch(API+'/fichas-audit',{cache:'no-store'})).json();
+const p=document.getElementById('fa-pill');
+if(!d.ok){p.textContent='no disponible';p.className='pill warn';el.innerHTML='<div class="card-sub">'+esc(d.error||'')+'</div>';return;}
+const n=(d.en_auditoria||[]).length;
+p.textContent=n+' en auditoría';p.className='pill '+(n?'warn':'on');
+el.innerHTML=n?d.en_auditoria.map(f=>`<div style="border-bottom:1px solid var(--border);padding:9px 2px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+<div><strong>${esc(f.name)}</strong> <span class="card-sub">${esc(f.category||'')} · ${esc(f.city||'')} · claim ${esc(f.claim_status||'?')} · ${esc((f.updated_at||'').slice(0,10))}</span></div>
+<a class="card-sub" style="color:var(--accent)" href="https://guaki.online/proveedores/${encodeURIComponent(f.slug||f.id)}" target="_blank" rel="noopener">ver ficha ↗</a></div>`).join(''):'<div class="card-sub" style="color:var(--green)">✓ Sin fichas esperando revisión.</div>';
+}catch(e){el.innerHTML='<div class="card-sub">Error: '+e.message+'</div>';}
+}
 async function toggleAuto(){
 if(autoT){clearInterval(autoT);autoT=null;document.getElementById('auto-txt').textContent='OFF'}
 else{autoT=setInterval(loadAll,10000);document.getElementById('auto-txt').textContent='ON'}
@@ -810,7 +874,7 @@ function showTab(name){
   document.querySelectorAll('.tab-panel').forEach(p=>{ const on=p.id==='tab-'+name; p.classList.toggle('active',on); p.setAttribute('aria-hidden', on?'false':'true'); });
   document.querySelectorAll('.tab').forEach(b=>{ const on=b.getAttribute('data-tab')===name; b.classList.toggle('active',on); b.setAttribute('aria-selected', on?'true':'false'); });
   try{ localStorage.setItem('torre_tab', name); }catch(_){}
-  if(name==='guaki') checkGuaki();
+  if(name==='guaki'){checkGuaki();loadWaQueue();loadFichas();}
   if(name==='torre') loadTorre();
 }
 function initTab(){
@@ -1914,6 +1978,156 @@ async def cambiar_limite_envio(body: _LimiteBody) -> dict[str, Any]:
     if not filas:
         raise HTTPException(status_code=409, detail="No se pudo actualizar app_settings.")
     return {"ok": True, "daily_send_limit": body.daily_send_limit}
+
+
+# ---------------------------------------------------------------- Cola WhatsApp manual (guaki/veyra) sobre Supabase Storage
+# La cola vive en el objeto privado `torre/wa-queue.json` (bucket torre): sin DDL
+# pendiente, lectura-escritura con la service key. Un operador a la vez (uso mono-
+# estacion de Edwin), por eso basta read-modify-write con x-upsert.
+
+_WA_QUEUE_PATH = "/storage/v1/object/torre/wa-queue.json"
+_WA_ACTIONS = {"contacted", "wrong", "undo"}
+
+
+def _storage_headers() -> dict[str, str] | None:
+    settings = get_settings()
+    if not settings.supabase_url or not settings.supabase_service_role_key_value:
+        return None
+    key = settings.supabase_service_role_key_value
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+
+
+async def _wa_queue_read() -> list[dict[str, Any]]:
+    import httpx
+
+    headers = _storage_headers()
+    if not headers:
+        return []
+    # Cache-buster: los objetos de Storage se sirven via CDN con cache; sin
+    # query unico el read-post-write devuelve la version anterior.
+    url = get_settings().supabase_url.rstrip("/") + _WA_QUEUE_PATH + f"?cb={time.time_ns()}"
+    async with httpx.AsyncClient(timeout=15.0) as c:
+        r = await c.get(url, headers={**headers, "Cache-Control": "no-cache"})
+        if r.status_code != 200:
+            return []
+        try:
+            return (r.json() or {}).get("items", [])
+        except Exception:
+            return []
+
+
+async def _wa_queue_write(items: list[dict[str, Any]]) -> bool:
+    import httpx
+
+    headers = _storage_headers()
+    if not headers:
+        return False
+    async with httpx.AsyncClient(timeout=15.0) as c:
+        r = await c.put(
+            get_settings().supabase_url.rstrip("/") + _WA_QUEUE_PATH,
+            headers={**headers, "x-upsert": "true"},
+            content=json.dumps({"items": items}, ensure_ascii=False).encode("utf-8"),
+        )
+        return r.status_code in (200, 201)
+
+
+@router.get("/whatsapp-queue", dependencies=[Depends(_require_operator)])
+async def whatsapp_queue(project: str = "guaki") -> dict[str, Any]:
+    """Cola de contactos que Edwin debe escribir por WhatsApp (pendientes primero).
+
+    Al marcar contacted/wrong el item sale de pendientes y queda en el historial
+    del dia: la lista avanza sola al siguiente.
+    """
+    items = await _wa_queue_read()
+    pendientes = [i for i in items if i.get("project") == project and i.get("status") == "pending"]
+    resueltos = [
+        i for i in items
+        if i.get("project") == project and i.get("status") != "pending"
+    ][-20:]
+    return {
+        "ok": True,
+        "project": project,
+        "pendientes": pendientes,
+        "resueltos": sorted(resueltos, key=lambda x: x.get("updated_at") or "", reverse=True),
+        "total_proyecto": len([i for i in items if i.get("project") == project]),
+    }
+
+
+class _WaActionIn(BaseModel):
+    action: str
+
+
+@router.post("/whatsapp-queue/{item_id}/action", dependencies=[Depends(_require_operator)])
+async def whatsapp_queue_action(item_id: str, payload: _WaActionIn) -> dict[str, Any]:
+    """contacted | wrong | undo sobre un item de la cola (persistencia real)."""
+    if payload.action not in _WA_ACTIONS:
+        raise HTTPException(status_code=422, detail="action debe ser contacted|wrong|undo")
+    items = await _wa_queue_read()
+    encontrado = False
+    for item in items:
+        if item.get("id") == item_id:
+            item["status"] = "pending" if payload.action == "undo" else payload.action
+            item["updated_at"] = datetime.now(UTC).isoformat()
+            encontrado = True
+            break
+    if not encontrado:
+        raise HTTPException(status_code=404, detail=f"Item {item_id} no esta en la cola")
+    if not await _wa_queue_write(items):
+        raise HTTPException(status_code=502, detail="No se pudo persistir la cola en Storage")
+    return {"ok": True, "id": item_id, "status": next(i["status"] for i in items if i.get("id") == item_id)}
+
+
+@router.post("/contact-whatsapp/{lead_id}/wrong", dependencies=[Depends(_require_operator)])
+async def contact_whatsapp_wrong(lead_id: str) -> dict[str, Any]:
+    """Numero erroneo en un lead Veyra: descarta de verdad (status DISQUALIFIED
+    + actividad), no solo visual. El lead desaparece de la cola de contactables
+    al quedar fuera del pipeline activo."""
+    from app.core.postgrest_client import pg_insert, pg_select, pg_update
+
+    filas = await pg_select("leads", columns="id,status,company_id,companies(name)", filters={"id": lead_id}, limit=1)
+    if not filas:
+        raise HTTPException(status_code=404, detail=f"Lead {lead_id} no encontrado")
+    nombre_empresa = (filas[0].get("companies") or {}).get("name") or ""
+
+    updated = await pg_update("leads", {"id": lead_id}, {"status": "DISQUALIFIED"})
+    if not updated:
+        raise HTTPException(status_code=502, detail="No se pudo descalificar el lead")
+    await pg_insert(
+        "activities",
+        {
+            "lead_id": lead_id,
+            "activity_type": "STAGE_CHANGED",
+            "actor_type": "USER",
+            "actor": "USER",
+            "subject": "Numero erraneo - descartado",
+            "title": "Numero erraneo - descartado",
+            "body": f"Edwin marco el numero de {nombre_empresa or 'este lead'} como erroneo desde la Torre de Control.",
+            "metadata": {"canal": "whatsapp", "origen": "torre-control", "motivo": "numero_malo"},
+        },
+    )
+    return {"ok": True, "lead_id": lead_id, "status": "DISQUALIFIED"}
+
+
+@router.get("/fichas-audit", dependencies=[Depends(_require_operator)])
+async def fichas_audit() -> dict[str, Any]:
+    """Fichas de Guaki en estado de auditoria (proxy al endpoint token-protetido de guaki)."""
+    token = (os.environ.get("TORRE_SHARED_TOKEN") or "").strip()
+    if not token:
+        return {"ok": False, "error": "TORRE_SHARED_TOKEN no configurado en este entorno"}
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as c:
+            r = await c.get("https://guaki.online/api/torre/fichas", headers={"x-torre-token": token})
+            if r.status_code != 200:
+                return {"ok": False, "error": f"guaki respondio {r.status_code}"}
+            return {"ok": True, **(r.json() or {})}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:150]}
 
 
 @router.get("/funnel", dependencies=[Depends(_require_operator)])
