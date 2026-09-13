@@ -33,7 +33,7 @@ from app.models.service import Service
 
 # Umbrales de alarma (§13.2). Por encima de esto no es una métrica más: es un
 # aviso de que el dominio se está quemando.
-BOUNCE_RATE_ALARM = 5.0
+BOUNCE_RATE_ALARM = 2.0
 UNSUBSCRIBE_RATE_ALARM = 0.5
 
 # Pasos del embudo, en orden. El primero sale de `companies`; el resto, de los

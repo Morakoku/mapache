@@ -36,5 +36,8 @@ if errorlevel 1 (
 )
 
 REM 2) Envia el cupo del dia.
-"%PYTHON%" "%SCRIPT%" --send --env "%ENV_FILE%"
+REM --cupo 100: decision EXPLICITA de Edwin (2026-09-12) de saltar la rampa.
+REM --sobrepasar-rebotes: hoy el rebote reciente supera el umbral del breaker;
+REM RETIRAR este flag en cuanto la tasa baje de 2% (ver log "Circuit breaker").
+"%PYTHON%" "%SCRIPT%" --send --cupo 100 --sobrepasar-rebotes "decision Edwin 2026-09-12: 100/dia ya, con rebote historico ~9.8%% en ultimos 100; retirar al bajar de 2%%" --env "%ENV_FILE%"
 exit /b %ERRORLEVEL%

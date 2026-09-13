@@ -202,6 +202,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 <div class="tab-panel active" id="tab-mapache" role="tabpanel" aria-hidden="false">
 <div class="grid" id="services"></div>
 <div class="card" style="margin-bottom:30px">
+<div class="card-header"><span class="card-title">🚦 Entregabilidad y control de envío</span><span id="dv-pill" class="pill warn">Cargando...</span></div>
+<div class="card-sub" id="dv-line">Consultando Resend (últimos 100 envíos)...</div>
+<div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;align-items:center">
+<button class="btn btn-off" id="dv-pause" onclick="togglePausa()">⏸ Pausar automatizaciones</button>
+<label style="font-size:12px;color:var(--muted)">Cupo diario <input id="dv-limit" type="number" min="1" max="2000" style="width:72px;background:#0a0a0a;border:1px solid var(--border);color:var(--fg);padding:6px;border-radius:6px"> <button class="refresh-btn" onclick="aplicarLimite()">Aplicar</button></label>
+<span class="card-sub" id="dv-est" style="color:var(--yellow)"></span>
+</div>
+</div>
+<div class="card" style="margin-bottom:30px">
 <div class="card-header"><span class="card-title">📊 Métricas</span></div>
 <div class="grid" style="margin-top:12px">
 <div class="card"><div class="card-sub">Empresas</div><div class="card-value" id="m-companies">--</div></div>
@@ -297,6 +306,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;backgroun
 <div class="tab-panel" id="tab-torre" role="tabpanel" aria-hidden="true">
 <div class="card" style="margin-bottom:30px">
 <div class="card-header"><span class="card-title">🗼 Trinidad — Portafolio</span><span id="t-status" class="pill warn">Cargando torre...</span></div>
+<div id="t-morning" style="font-size:15px;font-weight:700;margin-bottom:8px"></div>
 <p class="tab-note">Estado del portafolio completo (Guaki · Veyra · Brenda · Infra), leído en vivo del PC: hermes boards + Postiz + sondas. Regenerar: <code>node guaki/scripts/torre.mjs</code> (cron 07:00). Fuente de verdad: <code>Trinidad/TORRE.md</code></p>
 <div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="t-meta">--</div>
 <div class="grid" id="t-boards" style="margin-bottom:14px"></div>
@@ -707,6 +717,50 @@ log('Secuencia '+(accion==='activate'?'activada':'pausada'),'ok');
 await loadSequenceStatus();
 }catch(e){log('Secuencia: '+e.message,'err')}
 }
+let dvPaused=false;
+async function loadEntregabilidad(){
+try{
+const[dv,au]=await Promise.all([
+fetch(API+'/deliverability',{cache:'no-store'}).then(r=>r.json()),
+fetch(API+'/automations',{cache:'no-store'}).then(r=>r.json())
+]);
+const pill=document.getElementById('dv-pill');
+if(dv.ok){
+const pct=dv.bounce_rate_pct;
+const rojo=pct>dv.alarm_above;
+pill.textContent=rojo?('REBOTE '+pct+'% (rojo >'+dv.alarm_above+'%)'):('Rebote '+pct+'%');
+pill.className='pill '+(rojo?'off':'on');
+const c=dv.counts||{};
+document.getElementById('dv-line').textContent='Últimos '+dv.ventana+' envíos: '+(c.bounced||0)+' rebotados · '+(c.unsubscribed||0)+' bajas · '+((c.delivered||0)+(c.opened||0)+(c.clicked||0))+' entregados · umbral rojo '+dv.alarm_above+'%';
+}else{pill.textContent='Sin datos';pill.className='pill warn';document.getElementById('dv-line').textContent=dv.error||'error';}
+if(au&&au.ok){
+dvPaused=!!au.automations_paused;
+document.getElementById('dv-limit').value=au.daily_send_limit||100;
+const b=document.getElementById('dv-pause');
+b.textContent=dvPaused?'▶ Reanudar automatizaciones':'⏸ Pausar automatizaciones';
+b.className='btn '+(dvPaused?'btn-on':'btn-off');
+document.getElementById('dv-est').textContent=dvPaused?'⚠ AUTOMATIZACIONES EN PAUSA':'';
+}else if(au&&au.error){document.getElementById('dv-est').textContent='app_settings: '+au.error;}
+}catch(e){document.getElementById('dv-line').textContent='Error entregabilidad: '+e.message;}
+}
+async function togglePausa(){
+try{
+const r=await fetch(API+'/automations/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paused:!dvPaused})});
+if(!r.ok)throw new Error((await r.json()).detail||('HTTP '+r.status));
+log('Automatizaciones '+(dvPaused?'pausadas':'reanudadas')+' (cambio pendiente de aplicar)',dvPaused?'warn':'ok');
+await loadEntregabilidad();
+}catch(e){log('Control pausa: '+e.message,'err');}
+}
+async function aplicarLimite(){
+const v=parseInt(document.getElementById('dv-limit').value,10);
+if(!v||v<1||v>2000){log('Cupo inválido','err');return;}
+try{
+const r=await fetch(API+'/automations/limit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({daily_send_limit:v})});
+if(!r.ok)throw new Error((await r.json()).detail||('HTTP '+r.status));
+log('Cupo diario → '+v,'ok');
+await loadEntregabilidad();
+}catch(e){log('Límite: '+e.message,'err');}
+}
 async function toggleAuto(){
 if(autoT){clearInterval(autoT);autoT=null;document.getElementById('auto-txt').textContent='OFF'}
 else{autoT=setInterval(loadAll,10000);document.getElementById('auto-txt').textContent='ON'}
@@ -717,7 +771,8 @@ loadPipeline();
 loadWhatsApp();
 loadTemplates();
 loadSequenceStatus();
-autoT=setInterval(loadAll,10000);
+loadEntregabilidad();
+autoT=setInterval(()=>{loadAll();loadEntregabilidad()},10000);
 }else{gateShow();}
 
 // ---- Pestañas por marca: Mapache · Veyra · Guaki -------------------------
@@ -770,6 +825,10 @@ async function loadTorre(){
     const d=await (await fetch('http://127.0.0.1:7788/torre.json',{cache:'no-store'})).json();
     if(!d||!d.boards)throw new Error('formato inesperado');
     st.textContent='Torre viva';st.className='pill on';
+    const bo=d.boards||{};const n=(k)=>bo[k]&&!bo[k].error?bo[k].open:'—';
+    const ig=(d.postiz&&d.postiz.channels&&d.postiz.channels.length)?'📮 IG conectado':'📮 IG sin conectar (IGP1)';
+    const prio=(d.human_queue&&d.human_queue[0])?d.human_queue[0].title.slice(0,60):'';
+    document.getElementById('t-morning').textContent='🥑 '+n('guaki')+' · 🧭 '+n('veyra')+' · 💅 '+n('brenda')+' · ⚙️ '+n('default')+' · '+ig+(prio?(' — PRIORIDAD: '+prio):'');
     document.getElementById('t-meta').textContent='Generada: '+new Date(d.generated_at).toLocaleString('es-CO')+' · proxima auto-regeneracion: cron Hermes 07:00';
     const names={guaki:'🥑 Guaki',veyra:'🧭 Veyra',brenda:'💅 Brenda',cveliz:'Cveliz',sielan:'Sielan',lanza:'Lanza',atlas:'Atlas',default:'⚙️ Infra'};
     document.getElementById('t-boards').innerHTML=Object.entries(d.boards).filter(([k,v])=>!v.error&&(v.open||v.done||v.leads)).map(([k,v])=>`<div class="card"><div class="card-title">${names[k]||k}</div><div class="card-value" style="font-size:22px">${v.open} abiertas</div><div class="card-sub">${v.done} done${v.leads?` · ${v.leads} LEADs`:''}</div></div>`).join('')||'<div class="card-sub">sin tableros</div>';
@@ -1728,6 +1787,104 @@ async def activar_secuencia(sequence_id: str) -> dict[str, Any]:
 async def pausar_secuencia(sequence_id: str) -> dict[str, Any]:
     """Pone la secuencia en PAUSED (sus steps dejan de considerarse activos)."""
     return await _cambiar_estado_secuencia(sequence_id, "PAUSED")
+
+
+# ---------------------------------------------------------------- Torre v2: entregabilidad + control de envío (Plan A/G)
+
+
+@router.get("/deliverability", dependencies=[Depends(_require_operator)])
+async def entregabilidad() -> dict[str, Any]:
+    """Tasa de rebote de los ultimos envios en Resend: la MISMA ventana que
+    usa el circuit breaker del warm-up (last_event sobre ultimos 100).
+
+    El umbral rojo es `BOUNCE_RATE_ALARM` (ahora 2%, linea de la industria
+    para dominios jovenes); antes la alarma vivia en 5%, demasiado tarde.
+    """
+    settings = get_settings()
+    if not settings.resend_api_key_value:
+        return {"ok": False, "error": "Sin API key de Resend"}
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            r = await c.get(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {settings.resend_api_key_value}"},
+                params={"limit": 100},
+            )
+        if r.status_code != 200:
+            return {"ok": False, "error": f"Resend HTTP {r.status_code}"}
+        emails = (r.json() or {}).get("data", []) or []
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:120]}
+
+    cuenta = {"bounced": 0, "delivered": 0, "opened": 0, "clicked": 0, "unsubscribed": 0}
+    otros = 0
+    for e in emails:
+        ev = (e.get("last_event") or "").lower()
+        if ev in cuenta:
+            cuenta[ev] += 1
+        else:
+            otros += 1
+    ventana = cuenta["bounced"] + cuenta["delivered"] + cuenta["opened"] + cuenta["clicked"]
+    tasa = round(cuenta["bounced"] / ventana * 100, 1) if ventana else 0.0
+    from app.services.metrics_svc import BOUNCE_RATE_ALARM
+
+    return {
+        "ok": True,
+        "bounce_rate_pct": tasa,
+        "alarm_above": BOUNCE_RATE_ALARM,
+        "alarm": tasa > BOUNCE_RATE_ALARM,
+        "counts": cuenta,
+        "ventana": ventana,
+        "otros": otros,
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
+
+
+@router.get("/automations", dependencies=[Depends(_require_operator)])
+async def automaciones() -> dict[str, Any]:
+    """Estado del interruptor global y del cupo diario (fila unica app_settings)."""
+    from app.core.supabase_http import select as pg_select
+
+    filas = await pg_select(
+        "app_settings",
+        columns="automations_paused,daily_send_limit,hourly_send_limit,warmup_started_on",
+        limit=1,
+    )
+    if not filas:
+        return {"ok": False, "error": "app_settings sin fila (sembrar id=1)"}
+    return {"ok": True, **filas[0]}
+
+
+class _PausaBody(BaseModel):
+    paused: bool
+
+
+class _LimiteBody(BaseModel):
+    daily_send_limit: int
+
+
+@router.post("/automations/pause", dependencies=[Depends(_require_operator)])
+async def pausar_automaciones(body: _PausaBody) -> dict[str, Any]:
+    """Pausa/reanuda TODAS las automatizaciones (boton de panico de la Torre)."""
+    from app.core.supabase_http import update as pg_update
+
+    filas = await pg_update("app_settings", {"id": "1"}, {"automations_paused": body.paused})
+    if not filas:
+        raise HTTPException(status_code=409, detail="No se pudo pausar (¿falta la fila app_settings?).")
+    return {"ok": True, "automations_paused": body.paused}
+
+
+@router.post("/automations/limit", dependencies=[Depends(_require_operator)])
+async def cambiar_limite_envio(body: _LimiteBody) -> dict[str, Any]:
+    """Cupo diario de envio (1..2000) sobre la fila unica de app_settings."""
+    if not 1 <= body.daily_send_limit <= 2000:
+        raise HTTPException(status_code=422, detail="daily_send_limit fuera de 1..2000")
+    from app.core.supabase_http import update as pg_update
+
+    filas = await pg_update("app_settings", {"id": "1"}, {"daily_send_limit": body.daily_send_limit})
+    if not filas:
+        raise HTTPException(status_code=409, detail="No se pudo actualizar app_settings.")
+    return {"ok": True, "daily_send_limit": body.daily_send_limit}
 
 
 # ──────────────────────────────────────────────────────────────────────────

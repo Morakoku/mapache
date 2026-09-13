@@ -12,7 +12,7 @@ vivo via OpenAPI de PostgREST el 2026-09-09):
    El schema en vivo NO tiene una tabla adecuada para el registro de warm-up
    (no existe tabla de control y PostgREST no permite DDL para crearla).
    El JSON es la fuente de verdad de la idempotencia; Supabase queda como
-   espejo visible (lead.status=CONTACTED + activity EMAIL_SENT) para que la
+   espejo visible (lead.stage_id=etapa CONTACTED + activity EMAIL_SENT) para que la
    Torre de Control refleje el progreso. El JSON NO guarda el email real:
    guarda sha256(email normalizado) + version enmascarada (privacidad en
    disco). Escritura atomica (tmp + os.replace).
@@ -93,6 +93,10 @@ import httpx
 # ==========================================================================
 # CONFIGURACION — la rampa y todo lo ajustable vive aqui arriba
 # ==========================================================================
+
+# Umbrales del circuit breaker de envfo (linea roja de la industria para
+# dominio en warm-up: >2% de rebote ya degrada reputacion).
+UMBRAL_REBOTE_PAUSA = 2.0
 
 # Rampa de 14 dias: (dia_desde, dia_hasta, envios_por_dia).
 # Base de la escala: con --days N != 14 el dia se mapea proporcionalmente
@@ -667,16 +671,60 @@ class ClienteSupabase:
         return len(filas) if isinstance(filas, list) else 0
 
     def actualizar_lead_contactado(self, lead_id: str, ya_tenia_first_contact: bool) -> None:
-        """status=CONTACTED + first_contact_at + last_activity_at."""
-        payload: dict[str, Any] = {"status": "CONTACTED", "last_activity_at": ahora_utc_iso()}
+        """Espejo del `advance_on_first_contact` del CRM: mueve el lead a la
+        etapa CONTACTED via `leads.stage_id` + first_contact_at + historial.
+
+        NUNCA escribe `leads.status`: el enum `lead_status` solo admite
+        OPEN/WON/LOST/DISQUALIFIED/PAUSED y CONTACTED es un `stage_type`
+        (escribirlo ahí reventaba el espejo con 400 y dejaba la Torre a ciegas).
+        """
+        contacted_id: str | None = None
+        respuesta = self._request(
+            "GET",
+            "/rest/v1/pipeline_stages",
+            params={"select": "id", "stage_type": "eq.CONTACTED", "order": "position.asc", "limit": 1},
+        )
+        if respuesta.status_code == 200 and respuesta.json():
+            contacted_id = respuesta.json()[0]["id"]
+
+        prev_stage_id: str | None = None
+        respuesta = self._request(
+            "GET", "/rest/v1/leads", params={"select": "stage_id", "id": f"eq.{lead_id}", "limit": 1}
+        )
+        if respuesta.status_code == 200 and respuesta.json():
+            prev_stage_id = respuesta.json()[0].get("stage_id")
+
+        payload: dict[str, Any] = {"last_activity_at": ahora_utc_iso()}
+        avanza_etapa = False
         if not ya_tenia_first_contact:
             payload["first_contact_at"] = ahora_utc_iso()
+            if contacted_id and prev_stage_id != contacted_id:
+                payload["stage_id"] = contacted_id
+                avanza_etapa = True
+
         respuesta = self._request("PATCH", "/rest/v1/leads", params={"id": f"eq.{lead_id}"}, json_body=payload)
         if respuesta.status_code not in (200, 204):
             raise RuntimeError(
-                f"No se pudo actualizar el lead {lead_id} a CONTACTED "
-                f"(HTTP {respuesta.status_code}): {respuesta.text[:300]}"
+                f"No se pudo actualizar el lead {lead_id} (HTTP {respuesta.status_code}): "
+                f"{respuesta.text[:300]}"
             )
+
+        if avanza_etapa and contacted_id:
+            historial = {
+                "lead_id": lead_id,
+                "from_stage_id": prev_stage_id,
+                "to_stage_id": contacted_id,
+                "to_stage_type": "CONTACTED",
+                "actor": "SYSTEM",
+                "reason": "Warm-up: primer correo enviado",
+                "entered_at": ahora_utc_iso(),
+            }
+            r = self._request("POST", "/rest/v1/lead_stage_history", json_body=[historial])
+            if r.status_code not in (200, 201):
+                LOGGER.warning(
+                    "Historial de etapa no registrado para %s (HTTP %s): %s",
+                    lead_id, r.status_code, r.text[:200],
+                )
 
     def registrar_activity(
         self, lead_id: str, owner_id: str | None, dia: int, resend_id: str, email_enmascarado: str
@@ -1155,18 +1203,67 @@ def modo_revisar_rebotes(cliente: ClienteSupabase, estado: EstadoWarmup, resend_
     return 0
 
 
-def modo_send(cliente: ClienteSupabase, estado: EstadoWarmup, total_dias: int, resend_key: str) -> int:
-    """Envia los destinatarios del dia actual segun la rampa. Idempotente."""
+def tasa_rebotes_ultimos(resend_key: str, limite: int = LIMITE_LISTADO_RESEND) -> tuple[float, int, int]:
+    """(%, rebotes, correos contados) sobre los ultimos envios en Resend.
+
+    Cuenta last_event bounced sobre bounced+delivered+opened+clicked: es la
+    ventana que ven los filtros de spam, no un promedio historico completo.
+    """
+    cliente = ClienteResend(resend_key)
+    try:
+        emails = cliente.listar_emails(limite)
+    finally:
+        cliente.cerrar()
+    eventos_levantables = {"bounced", "delivered", "opened", "clicked"}
+    reb = sum(1 for e in emails if (e.get("last_event") or "").lower() == "bounced")
+    total = sum(1 for e in emails if (e.get("last_event") or "").lower() in eventos_levantables)
+    if not total:
+        return 0.0, 0, 0
+    return (reb / total) * 100.0, reb, total
+
+
+def modo_send(
+    cliente: ClienteSupabase,
+    estado: EstadoWarmup,
+    total_dias: int,
+    resend_key: str,
+    cupo_forzado: int | None = None,
+    sobrepasar_rebotes: str | None = None,
+) -> int:
+    """Envia los destinatarios del dia. Idempotente.
+
+    Guardrail: si la tasa de rebote de los ultimos envios supera
+    UMBRAL_REBOTE_PAUSA, el run se ABORTE (exit 2) salvo que se pase
+    --sobrepasar-rebotes con la razon (queda en el log, auditable).
+    """
     hoy = date.today()
     dia = estado.dia_actual(hoy)
 
-    cupo = cupo_para_dia(dia, total_dias)
+    cupo = cupo_forzado if cupo_forzado is not None else cupo_para_dia(dia, total_dias)
     if cupo is None:
         LOGGER.info(
             "Dia %s fuera de la rampa de %s dias: el warm-up ya termino. Nada que enviar.",
             dia, total_dias,
         )
         return 0
+
+    tasa, rebotes, ventana = tasa_rebotes_ultimos(resend_key)
+    LOGGER.info(
+        "Circuit breaker: rebote %.1f%% (%s de %s ultimos) vs umbral %.1f%%.",
+        tasa, rebotes, ventana, UMBRAL_REBOTE_PAUSA,
+    )
+    if tasa > UMBRAL_REBOTE_PAUSA:
+        if not sobrepasar_rebotes:
+            LOGGER.error(
+                "PAUSA AUTOMATICA: rebote %.1f%% por encima del %.1f%%. No se envia nada. "
+                "Corrije la causa (suprime dominios rebotados con --check-bounces) o, si el "
+                "riesgo esta aceptado, re-ejecuta con --sobrepasar-rebotes '<razon>'.",
+                tasa, UMBRAL_REBOTE_PAUSA,
+            )
+            return 2
+        LOGGER.warning(
+            "Sobrepasando el circuit breaker por decision explicita: %s", sobrepasar_rebotes
+        )
 
     ya_enviados = estado.enviados_del_dia(dia)
     faltan = cupo - len(ya_enviados)
@@ -1311,6 +1408,10 @@ def main() -> int:
                         help=f"Duracion de la rampa en dias (default {DIAS_PREDETERMINADOS}).")
     parser.add_argument("--env", default=str(RUTA_ENV_PREDETERMINADA),
                         help="Ruta del .env con SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY y RESEND_API_KEY.")
+    parser.add_argument("--cupo", type=int, default=None,
+                        help="Fuerza el cupo del dia (omite la rampa). Solo con decision explícita de Edwin.")
+    parser.add_argument("--sobrepasar-rebotes", default=None, metavar="RAZON",
+                        help="Continuar aunque el rebote supere el umbral, dejando la razon en el log.")
     args = parser.parse_args()
 
     modos = [m for m in (args.send, args.status, args.plan, args.check_bounces) if m]
@@ -1360,7 +1461,8 @@ def main() -> int:
             return 0
         if args.check_bounces:
             return modo_revisar_rebotes(cliente, estado, resend_key or "")
-        return modo_send(cliente, estado, args.days, resend_key or "")
+        return modo_send(cliente, estado, args.days, resend_key or "",
+                         cupo_forzado=args.cupo, sobrepasar_rebotes=args.sobrepasar_rebotes)
     finally:
         cliente.cerrar()
 
