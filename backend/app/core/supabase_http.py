@@ -164,7 +164,11 @@ async def insert(
 
     # Si data no tiene id o dedupe_key, generarlos
     if isinstance(data, dict):
-        if "id" not in data:
+        if "id" not in data and not (upsert and table == "companies"):
+            # companies en upsert JAMAS recibe id generado: si el merge
+            # encuentra la fila por (owner_id, dedupe_key) intentaria
+            # UPDATE de la PK y rompería el FK de leads (23503/409).
+            # Las filas nuevas las resuelve gen_random_uuid() de la DB.
             data["id"] = str(uuid.uuid4())
         if "dedupe_key" not in data and table == "companies":
             data["dedupe_key"] = data.get("name", "").lower().strip()[:40]
