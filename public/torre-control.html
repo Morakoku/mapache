@@ -141,8 +141,10 @@ if(ch===0)items.push('🔴 <b>IGP1</b> — conectar Instagram en Postiz (checkli
 else items.push(`🟢 Canal IG conectado (${ch}) — falta volcar drafts (IGP2)`);
 for(const x of (d.human_queue||[]).slice(0,8))items.push(`⚪ [${x.board}] ${x.title}`);
 for(const[k,v]of Object.entries(d.lead_counts||{}))items.push(`📣 ${v} × ${k}`);
-const c=d.content||{};
+const c=d.content||{};const pp=c.postiz_posts||{};
 items.push(`🎨 ${c.posts||0} posts · ${c.stories||0} historias · ${c.reels||0} reels (falta audio) · ${c.drafts||0} drafts listos`);
+if(pp.state==='ok')items.push(`📮 Lane contenido — ✅ <b>${pp.published||0} publicados</b> · 🕒 <b>${pp.scheduled||0} programados</b> · 📝 ${pp.draft||0} en borrador`);
+else items.push(`📮 Lane contenido — ⚪ sin datos (${pp.detail||'Postiz no configurado'} · estado: ${pp.state||'unknown'})`);
 hq.innerHTML=items.map(i=>`<div>${i}</div>`).join('');
 log('Torre portafolio OK','ok');
 }catch(e){
