@@ -60,7 +60,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mapache CRM - Torre de Control</title>
 <style>
-:root{--bg:#0a0a0a;--card:#111;--border:#1a1a1a;--fg:#e0e0e0;--muted:#9aa0a6;--accent:#ff6b35;--green:#00c853;--red:#ff1744;--yellow:#ffd600;--blue:#2979ff}
+:root{--bg:#000;--card:#0a0a0a;--border:#1c1c1c;--fg:#ffffff;--muted:#9aa0a6;--accent:#ff6b35;--green:#00c853;--red:#ff1744;--yellow:#ffd600;--blue:#2979ff}
     :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
     ::selection{background:var(--accent);color:#0a0a0a}
     html{caret-color:var(--accent)}
@@ -70,7 +70,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     ::-webkit-scrollbar-thumb:hover{background:#3a3a3a}
     @media (prefers-reduced-motion: reduce){*,*::before,*::after{transition-duration:.01ms !important;animation-duration:.01ms !important;animation-iteration-count:1 !important}}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;color:var(--fg);min-height:100vh;padding:20px;background:#0a0a0a radial-gradient(1200px 600px at 85% -10%,rgba(255,107,53,.08),transparent),radial-gradient(900px 500px at -10% 30%,rgba(0,200,83,.06),transparent),radial-gradient(700px 400px at 60% 110%,rgba(41,121,255,.06),transparent) fixed}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;color:var(--fg);min-height:100vh;padding:20px;background:#000}
 .header{display:flex;align-items:center;justify-content:space-between;padding:20px 0;border-bottom:1px solid var(--border);margin-bottom:30px;flex-wrap:wrap;gap:15px}
 .header h1{font-size:24px;font-weight:700}
 .header .logo{color:var(--accent)}
@@ -932,8 +932,10 @@ async function loadTorre(){
     else items.push(`🟢 Canal IG conectado (${ch}) — falta volcar drafts (IGP2)`);
     for(const x of (d.human_queue||[]).slice(0,8))items.push(`⚪ [${x.board}] ${x.title}`);
     for(const[k,v]of Object.entries(d.lead_counts||{}))items.push(`📣 ${v} × ${k} (rutina 15/dia)`);
-    const c=d.content||{};
+    const c=d.content||{};const pp=c.postiz_posts||{};
     items.push(`🎨 ${c.posts||0} posts · ${c.stories||0} historias · ${c.reels||0} reels (falta audio) · ${c.drafts||0} drafts listos`);
+    if(pp.state==='ok')items.push(`📮 Lane contenido — ✅ <b>${pp.published||0} publicados</b> · 🕒 <b>${pp.scheduled||0} programados</b> · 📝 ${pp.draft||0} en borrador`);
+    else items.push(`📮 Lane contenido — ⚪ sin datos (${pp.detail||'Postiz no configurado'} · estado: ${pp.state||'unknown'})`);
     document.getElementById('t-humans').innerHTML=items.map(i=>`<div>${i}</div>`).join('');
     log('Torre portafolio OK','ok');
   }catch(e){
