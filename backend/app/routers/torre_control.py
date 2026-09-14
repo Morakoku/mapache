@@ -303,10 +303,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;color:var
 <div class="card-header"><span class="card-title">🦝 Guaki · Marketplace</span><span id="guaki-pill" class="pill warn">Verificando...</span></div>
 <p class="tab-note">Guaki es una app aparte (directorio inteligente por voz). Aquí viven sus accesos y el estado de su servicio; sus métricas se ven dentro de Guaki.</p>
 <div style="display:flex;gap:10px;flex-wrap:wrap">
-<a class="refresh-btn" href="https://guakiweb.vercel.app" target="_blank" rel="noopener" style="text-decoration:none">Abrir Guaki</a>
-<a class="refresh-btn" href="https://guakiweb.vercel.app/directorio" target="_blank" rel="noopener" style="text-decoration:none">Directorio</a>
-<a class="refresh-btn" href="https://guakiweb.vercel.app/provider/dashboard" target="_blank" rel="noopener" style="text-decoration:none">Panel de negocios</a>
-<a class="refresh-btn" href="https://guakiweb.vercel.app/api/health" target="_blank" rel="noopener" style="text-decoration:none">Health</a>
+<a class="refresh-btn" href="https://guaki.online" target="_blank" rel="noopener" style="text-decoration:none">Abrir Guaki</a>
+<a class="refresh-btn" href="https://guaki.online/directorio" target="_blank" rel="noopener" style="text-decoration:none">Directorio</a>
+<a class="refresh-btn" href="https://guaki.online/provider/dashboard" target="_blank" rel="noopener" style="text-decoration:none">Panel de negocios</a>
+<a class="refresh-btn" href="https://guaki.online/api/health" target="_blank" rel="noopener" style="text-decoration:none">Health</a>
 </div>
 </div>
 <div class="card">
@@ -992,7 +992,7 @@ async function checkGuaki(){
   const body=document.getElementById('guaki-body');
   if(!pill||!body)return;
   pill.className='pill warn'; pill.textContent='Verificando...';
-  body.innerHTML='<div class="card-sub">Consultando guakiweb.vercel.app/api/health...</div>';
+  body.innerHTML='<div class="card-sub">Consultando guaki.online/api/health...</div>';
   try{
     const r=await fetch('/torre-control/guaki/status',{cache:'no-store'});
     const j=await r.json().catch(()=>({}));
@@ -2967,7 +2967,7 @@ async def guaki_status() -> dict[str, Any]:
 
     try:
         async with httpx.AsyncClient(timeout=8.0) as c:
-            r = await c.get("https://guakiweb.vercel.app/api/health")
+            r = await c.get("https://guaki.online/api/health")
         data: dict[str, Any] = {}
         if "application/json" in (r.headers.get("content-type") or ""):
             try:
