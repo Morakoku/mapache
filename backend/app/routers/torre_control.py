@@ -2195,7 +2195,124 @@ async def whatsapp_queue_action(item_id: str, payload: _WaActionIn) -> dict[str,
     return {"ok": True, "id": item_id, "status": next(i["status"] for i in items if i.get("id") == item_id)}
 
 
-class _DiscardIn(BaseModel):
+class _WaSeedIn(BaseModel):
+    """Relleno de la cola con leads reales del CRM (companies con WhatsApp
+    valido). Sin datos inventados: solo contactos existentes en la base."""
+
+    project: str = "guaki"
+    objetivo: int = 100
+
+
+@router.post("/whatsapp-queue/seed", dependencies=[Depends(_require_operator)])
+async def whatsapp_queue_seed(payload: _WaSeedIn) -> dict[str, Any]:
+    """Siembra la cola de WhatsApp con contactos reales del CRM.
+    1) Leads con status OPEN cuya companies tenga WhatsApp valido.
+    2) Fallback: companies con WhatsApp ordenadas por data_quality_score.
+    Deduplica por telefono contra TODA la cola (pendientes e historial)."""
+    from app.core.supabase_http import select as pg_select
+
+    def _digits(v) -> str:
+        return "".join(ch for ch in str(v or "") if ch.isdigit())
+
+    if payload.project not in ("guaki", "veyra"):
+        raise HTTPException(status_code=422, detail="project debe ser guaki|veyra")
+    objetivo = max(1, min(500, payload.objetivo))
+
+    items = await _wa_queue_read()
+    tel_usados: set[str] = set()
+    for it in items:
+        tel_usados.add(_digits(it.get("phone")))
+        tel_usados.add(_digits((it.get("wa_link") or "").rsplit("/", 1)[-1]))
+    tel_usados.discard("")
+
+    ahora_iso = datetime.now(UTC).isoformat()
+    nuevas: list[dict[str, Any]] = []
+
+    leads = (
+        await pg_select(
+            "leads",
+            columns="id,company_id,status,companies(id,name,city,whatsapp,phone,data_quality_score)",
+            filters={"status": "OPEN"},
+            limit=800,
+        )
+        or []
+    )
+    fuente = {"leads_open": 0, "fallback_companies": 0}
+    for lead in leads:
+        if len(nuevas) >= objetivo:
+            break
+        c = lead.get("companies") or {}
+        tel = _digits(c.get("whatsapp") or c.get("phone"))
+        if len(tel) < 10 or tel in tel_usados:
+            continue
+        tel_usados.add(tel)
+        nuevas.append(
+            {
+                "project": payload.project,
+                "id": f"wa-{uuid.uuid4().hex[:10]}",
+                "name": (c.get("name") or "Negocio sin nombre")[:90],
+                "zone": (c.get("city") or "")[:60],
+                "phone": f"+{tel}",
+                "wa_link": f"https://wa.me/{tel}",
+                "status": "pending",
+                "notes": "",
+                "created_at": ahora_iso,
+                "updated_at": ahora_iso,
+            }
+        )
+        fuente["leads_open"] += 1
+
+    if len(nuevas) < objetivo:
+        comps = (
+            await pg_select(
+                "companies",
+                columns="id,name,city,whatsapp,phone,data_quality_score",
+                limit=1000,
+            )
+            or []
+        )
+        ya = {lead.get("company_id") for lead in leads if lead.get("company_id")}
+        comps.sort(key=lambda c: (c.get("data_quality_score") is None, -(c.get("data_quality_score") or 0)))
+        for c in comps:
+            if len(nuevas) >= objetivo:
+                break
+            if c.get("id") in ya:
+                continue
+            tel = _digits(c.get("whatsapp") or c.get("phone"))
+            if len(tel) < 10 or tel in tel_usados:
+                continue
+            tel_usados.add(tel)
+            nuevas.append(
+                {
+                    "project": payload.project,
+                    "id": f"wa-{uuid.uuid4().hex[:10]}",
+                    "name": (c.get("name") or "Negocio sin nombre")[:90],
+                    "zone": (c.get("city") or "")[:60],
+                    "phone": f"+{tel}",
+                    "wa_link": f"https://wa.me/{tel}",
+                    "status": "pending",
+                    "notes": "",
+                    "created_at": ahora_iso,
+                    "updated_at": ahora_iso,
+                }
+            )
+            fuente["fallback_companies"] += 1
+
+    if not nuevas:
+        pend = sum(1 for i in items if i.get("project") == payload.project and i.get("status") == "pending")
+        return {"ok": True, "agregados": 0, "pendientes_proyecto": pend, "fuente": fuente}
+
+    nuevos_items = items + nuevas
+    if not await _wa_queue_write(nuevos_items):
+        raise HTTPException(status_code=502, detail="No se pudo persistir la cola en Storage")
+    pend = sum(1 for i in nuevos_items if i.get("project") == payload.project and i.get("status") == "pending")
+    return {
+        "ok": True,
+        "agregados": len(nuevas),
+        "fuente": fuente,
+        "pendientes_proyecto": pend,
+        "muestra": [{"name": n["name"], "wa_link": n["wa_link"]} for n in nuevas[:30]],
+    }
     """Payload del descarte con motivo (opcional: si no llega reason, sigue
     funcionando como el /wrong clasico, con motivo por defecto)."""
 
