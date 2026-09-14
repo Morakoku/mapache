@@ -23,6 +23,7 @@ import os
 import re
 import threading
 import time
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -373,6 +374,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',monospace;color:var
 </div>
 </div>
 </div>
+<!-- Modal: descarte con motivo (Veyra / Cola Guaki). Reemplaza al confirm
+     clasico: deja registro de POR QUE se descarta. El motivo es opcional
+     (backend backward-compatible), pero el placeholder invita a darlo. -->
+<div class="modal-overlay" id="modal-discard" onclick="if(event.target===this)discardClose()">
+<div class="modal" style="max-width:440px">
+<div class="modal-head">
+<div>
+<div class="modal-title" id="discard-title">Descartar prospecto</div>
+<div class="card-sub">Se descalifica en el CRM (o se marca como erróneo en la cola) y sale de la lista.</div>
+</div>
+<button class="btn btn-sm btn-outline" onclick="discardClose()">Cerrar</button>
+</div>
+<label class="ed-label" for="discard-reason">Motivo <span class="ed-hint">(opcional)</span></label>
+<textarea id="discard-reason" class="ed-input" rows="3" placeholder="Ej. número erróneo, no responde, empresa cerrada…"></textarea>
+<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
+<button class="btn btn-sm btn-outline" onclick="discardClose()">Cancelar</button>
+<button class="btn btn-sm btn-off" onclick="discardConfirm()">Descartar</button>
+</div>
+</div>
+</div>
 <script>
 const API='/torre-control';
 let TOKEN=sessionStorage.getItem('veyra_ops_token')||'';
@@ -451,15 +472,91 @@ log('WhatsApp: '+d.total+' contactables','ok');
 }catch(e){log('WhatsApp: '+e.message,'err')}
 }
 function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML}
-async function waWrong(leadId){
-if(!confirm('¿Número erróneo? El lead se DESCALIFICA en el CRM (dispar de verdad, no visual) y sale de la cola.'))return;
-try{
-const r=await fetch(API+`/contact-whatsapp/${leadId}/wrong`,{method:'POST'});
-if(!r.ok)throw new Error('HTTP '+r.status);
-waData=waData.filter(l=>l.lead_id!==leadId);
-renderWhatsApp();
-log('Lead descalificado por número erróneo','warn');
-}catch(e){log('wrong: '+e.message,'err')}
+// --- Descarte con motivo: modal compartido (Veyra + Cola Guaki) ---
+let discardCtx=null;
+function discardOpen(kind,id,label){
+  discardCtx={kind,id};
+  document.getElementById('discard-reason').value='';
+  document.getElementById('discard-title').textContent='Descartar: '+label;
+  document.getElementById('modal-discard').classList.add('open');
+}
+function discardClose(){document.getElementById('modal-discard').classList.remove('open');discardCtx=null;}
+async function discardConfirm(){
+  if(!discardCtx)return;
+  const reason=(document.getElementById('discard-reason').value||'').trim();
+  const {kind,id}=discardCtx;
+  try{
+    if(kind==='veyra'){
+      const r=await fetch(API+`/contact-whatsapp/${id}/wrong`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(reason?{reason}:{})});
+      if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('HTTP '+r.status));
+      const d=await r.json();
+      const l=waFind(id);
+      if(l)l.status='DISQUALIFIED';
+      renderWhatsApp();
+      log('Lead descalificado'+(d.motivo?(' ('+d.motivo+')'):''),'warn');
+    }else{
+      const r=await fetch(API+`/whatsapp-queue/${id}/action`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'wrong',...reason?{reason}:{}})});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      log('Cola guaki: '+id+' → wrong'+(reason?(' ('+reason+')'):''),'warn');
+      await loadWaQueue();
+    }
+    discardClose();
+  }catch(e){log('Descartar: '+e.message,'err')}
+}
+// --- Deshacer descarte (Veyra: DISQUALIFIED → OPEN) ---
+async function waUndo(leadId){
+  try{
+    const r=await fetch(API+`/contact-whatsapp/${leadId}/undo`,{method:'POST'});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('HTTP '+r.status));
+    const l=waFind(leadId);
+    if(l)l.status='OPEN';
+    renderWhatsApp();
+    log('Descarte revertido a OPEN','ok');
+  }catch(e){log('undo: '+e.message,'err')}
+}
+// --- Enriquecer empresa desde la Torre (Veyra / Guaki) ---
+async function waEnrich(companyId,label,btn){
+  const orig=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='Enriqueciendo…';}
+  try{
+    const r=await fetch(API+`/companies/${companyId}/enrich`,{method:'POST'});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('HTTP '+r.status));
+    const d=await r.json();
+    if(d.queued){
+      log('Enriquecimiento encolado: '+label+' (job '+String(d.job_id||'').slice(0,8)+')','ok');
+      if(btn)btn.textContent='⏳ Encolado';
+    }else{
+      const o=d.outcome||{};
+      const resumen=`${o.emails_found||0} emails · ${o.phones_found||0} tel · ${o.socials_found||0} redes · ${(o.signals||[]).length} señales · DQS ${o.dqs??'--'}`;
+      log('Enriquecido '+label+': '+resumen,'ok');
+      if(btn)btn.textContent='✓ '+((o.emails_found||0)+'e · DQS '+(o.dqs??'--'));
+    }
+  }catch(e){
+    log('Enriquecer: '+e.message,'err');
+    if(btn){btn.textContent=orig;btn.disabled=false;}
+    return;
+  }
+  if(btn){setTimeout(()=>{btn.textContent=orig;btn.disabled=false;},4000);}
+}
+async function guakiEnrich(companyId,label,btn){
+  const orig=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='Enriqueciendo…';}
+  try{
+    const r=await fetch(API+`/companies/${companyId}/enrich`,{method:'POST'});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('HTTP '+r.status));
+    const d=await r.json();
+    if(d.queued){log('Enriquecimiento encolado: '+label,'ok');if(btn)btn.textContent='⏳ Encolado';}
+    else{
+      const o=d.outcome||{};
+      log('Enriquecido '+label+': '+((o.emails_found||0)+' emails · '+(o.phones_found||0)+' tel · '+(o.socials_found||0)+' redes · DQS '+(o.dqs??'--')),'ok');
+      if(btn)btn.textContent='✓ '+(o.dqs??'--');
+    }
+  }catch(e){
+    log('Enriquecer: '+e.message,'err');
+    if(btn){btn.textContent=orig;btn.disabled=false;}
+    return;
+  }
+  if(btn){setTimeout(()=>{btn.textContent=orig;btn.disabled=false;},4000);}
 }
 function renderWhatsApp(){
 const el=document.getElementById('wa-list');
@@ -467,16 +564,20 @@ if(!waData.length){el.innerHTML='<div class="card-sub">No hay leads con teléfon
 el.innerHTML=waData.map(l=>{
 const st=waState[l.lead_id]||{};
 const done=st.contacted;
+const desc=l.status==='DISQUALIFIED';
 return`<div class="wa-item${done?' done':''}" id="wa-${l.lead_id}">
 <div class="wa-row">
 <div>
-<div class="wa-name">${esc(l.company)}</div>
+<div class="wa-name">${esc(l.company)}${desc?' <span class="pill off" style="margin-left:6px">Descartado</span>':''}</div>
 <div class="wa-meta">${esc(l.category)||'Sin categoría'} · ${esc(l.phone_display)}${l.rating!=null?' · ⭐ '+l.rating:''}${l.city?' · '+esc(l.city):''}</div>
 </div>
 <div class="wa-actions">
 <button class="btn btn-sm btn-accent" onclick="waCopys('${l.lead_id}')">Generar copys</button>
-<button class="btn btn-sm btn-outline" id="wa-mark-${l.lead_id}" onclick="waMark('${l.lead_id}')" ${done?'disabled':''}>${done?'Contactado ✓':'Marcar contactado'}</button>
-<button class="btn btn-sm btn-off" onclick="waWrong('${l.lead_id}')">☎ Número erróneo</button>
+${desc
+?`<button class="btn btn-sm btn-outline" onclick="waUndo('${l.lead_id}')">↩ Deshacer</button>`
+:`<button class="btn btn-sm btn-outline" id="wa-mark-${l.lead_id}" onclick="waMark('${l.lead_id}')" ${done?'disabled':''}>${done?'Contactado ✓':'Marcar contactado'}</button>
+<button class="btn btn-sm btn-outline" onclick="waEnrich('${l.company_id}','${esc(l.company)}',this)">✨ Enriquecer</button>
+<button class="btn btn-sm btn-off" onclick="discardOpen('veyra','${l.lead_id}','${esc(l.company)}')">☎ Descartar</button>`}
 </div>
 </div>
 <div class="wa-panel" id="wa-panel-${l.lead_id}"${st.open?' data-open="1"':''}>
@@ -824,11 +925,12 @@ el.innerHTML=d.pendientes.length?d.pendientes.map(i=>`<div style="border:1px sol
 <div><strong>${esc(i.name)}</strong> <span class="card-sub">${esc(i.zone||'')}</span></div>
 <div style="display:flex;gap:6px;flex-wrap:wrap">
 <a class="btn btn-sm btn-on" style="text-decoration:none" href="${i.wa_link}" target="_blank" rel="noopener">✆ Abrir WhatsApp</a>
+${i.company_id?`<button class="btn btn-sm btn-outline" onclick="guakiEnrich('${i.company_id}','${esc(i.name)}',this)">✨ Enriquecer</button>`:''}
 <button class="btn btn-sm btn-outline" onclick="guakiWaAct('${i.id}','contacted')">Contactado</button>
-<button class="btn btn-sm btn-off" onclick="guakiWaAct('${i.id}','wrong')">☎ Erróneo</button>
+<button class="btn btn-sm btn-off" onclick="discardOpen('guaki','${i.id}','${esc(i.name)}')">☎ Erróneo</button>
 </div></div></div>`).join(''):'<div class="card-sub" style="color:var(--green)">✓ Cola del día completada. Mañana entra la siguiente tanda (30/día).</div>';
 const done=document.getElementById('wq-done');
-done.textContent=d.resueltos.length?('Resueltos recientes: '+d.resueltos.map(x=>x.id+'→'+x.status).join(', ')):'';
+done.innerHTML=d.resueltos.length?('<div class="card-sub" style="margin-bottom:6px">Resueltos recientes:</div>'+d.resueltos.map(x=>`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px"><span style="font-size:12px"><strong>${esc(x.name||x.id)}</strong> <span class="card-sub">→ ${esc(x.status)}</span>${x.reason?' <span class="card-sub">· '+esc(x.reason)+'</span>':''}</span><button class="btn btn-sm btn-outline" onclick="guakiWaAct('${x.id}','undo')">↩ Deshacer</button></div>`).join('')):'';
 }catch(e){el.innerHTML='<div class="card-sub">Cola no disponible: '+e.message+'</div>';}
 }
 async function guakiWaAct(id,action){
@@ -2061,11 +2163,17 @@ async def whatsapp_queue(project: str = "guaki") -> dict[str, Any]:
 
 class _WaActionIn(BaseModel):
     action: str
+    reason: str | None = None
 
 
 @router.post("/whatsapp-queue/{item_id}/action", dependencies=[Depends(_require_operator)])
 async def whatsapp_queue_action(item_id: str, payload: _WaActionIn) -> dict[str, Any]:
-    """contacted | wrong | undo sobre un item de la cola (persistencia real)."""
+    """contacted | wrong | undo sobre un item de la cola (persistencia real).
+
+    `reason` es opcional y, en action=wrong, queda guardado en el item de la
+    cola para el historial del día (backward-compatible: sin reason sigue
+    igual que antes).
+    """
     if payload.action not in _WA_ACTIONS:
         raise HTTPException(status_code=422, detail="action debe ser contacted|wrong|undo")
     items = await _wa_queue_read()
@@ -2073,6 +2181,10 @@ async def whatsapp_queue_action(item_id: str, payload: _WaActionIn) -> dict[str,
     for item in items:
         if item.get("id") == item_id:
             item["status"] = "pending" if payload.action == "undo" else payload.action
+            if payload.action == "undo":
+                item.pop("reason", None)
+            elif payload.action == "wrong" and payload.reason:
+                item["reason"] = payload.reason.strip()[:200]
             item["updated_at"] = datetime.now(UTC).isoformat()
             encontrado = True
             break
@@ -2083,11 +2195,21 @@ async def whatsapp_queue_action(item_id: str, payload: _WaActionIn) -> dict[str,
     return {"ok": True, "id": item_id, "status": next(i["status"] for i in items if i.get("id") == item_id)}
 
 
+class _DiscardIn(BaseModel):
+    """Payload del descarte con motivo (opcional: si no llega reason, sigue
+    funcionando como el /wrong clasico, con motivo por defecto)."""
+
+    reason: str | None = None
+
+
 @router.post("/contact-whatsapp/{lead_id}/wrong", dependencies=[Depends(_require_operator)])
-async def contact_whatsapp_wrong(lead_id: str) -> dict[str, Any]:
+async def contact_whatsapp_wrong(lead_id: str, payload: _DiscardIn | None = None) -> dict[str, Any]:
     """Numero erroneo en un lead Veyra: descarta de verdad (status DISQUALIFIED
-    + actividad), no solo visual. El lead desaparece de la cola de contactables
-    al quedar fuera del pipeline activo."""
+    + lost_reason + actividad), no solo visual. Acepta un `reason` opcional que
+    se guarda en leads.lost_reason y en metadata.motivo; sin reason, se usa el
+    motivo clasico `numero_malo` (backward-compatible).
+    El lead desaparece de la cola de contactables al quedar fuera del pipeline
+    activo."""
     from app.core.postgrest_client import pg_insert, pg_select, pg_update
 
     filas = await pg_select("leads", columns="id,status,company_id,companies(name)", filters={"id": lead_id}, limit=1)
@@ -2095,7 +2217,11 @@ async def contact_whatsapp_wrong(lead_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"Lead {lead_id} no encontrado")
     nombre_empresa = (filas[0].get("companies") or {}).get("name") or ""
 
-    updated = await pg_update("leads", {"id": lead_id}, {"status": "DISQUALIFIED"})
+    motivo = (payload.reason if payload else "").strip() or "numero_malo"
+
+    updated = await pg_update(
+        "leads", {"id": lead_id}, {"status": "DISQUALIFIED", "lost_reason": motivo}
+    )
     if not updated:
         raise HTTPException(status_code=502, detail="No se pudo descalificar el lead")
     await pg_insert(
@@ -2104,14 +2230,229 @@ async def contact_whatsapp_wrong(lead_id: str) -> dict[str, Any]:
             "lead_id": lead_id,
             "activity_type": "STAGE_CHANGED",
             "actor_type": "USER",
-            "actor": "USER",
             "subject": "Numero erraneo - descartado",
-            "title": "Numero erraneo - descartado",
-            "body": f"Edwin marco el numero de {nombre_empresa or 'este lead'} como erroneo desde la Torre de Control.",
-            "metadata": {"canal": "whatsapp", "origen": "torre-control", "motivo": "numero_malo"},
+            "body": f"Edwin marco el numero de {nombre_empresa or 'este lead'} como erroneo desde la Torre de Control."
+            + (f" Motivo: {motivo}" if motivo != "numero_malo" else ""),
+            "metadata": {"canal": "whatsapp", "origen": "torre-control", "motivo": motivo},
         },
     )
-    return {"ok": True, "lead_id": lead_id, "status": "DISQUALIFIED"}
+    return {"ok": True, "lead_id": lead_id, "status": "DISQUALIFIED", "motivo": motivo}
+
+
+@router.post("/contact-whatsapp/{lead_id}/undo", dependencies=[Depends(_require_operator)])
+async def contact_whatsapp_undo(lead_id: str) -> dict[str, Any]:
+    """Reverte un descarte manual: vuelve el lead a OPEN (y limpia lost_reason)
+    y deja rastro en activities con metadata.result=undo. Simetrico a /wrong:
+    con esto un lead mal descartado recupera su lugar en la cola."""
+    from app.core.postgrest_client import pg_insert, pg_select, pg_update
+
+    filas = await pg_select("leads", columns="id,status,company_id,companies(name)", filters={"id": lead_id}, limit=1)
+    if not filas:
+        raise HTTPException(status_code=404, detail=f"Lead {lead_id} no encontrado")
+    nombre_empresa = (filas[0].get("companies") or {}).get("name") or ""
+
+    updated = await pg_update(
+        "leads", {"id": lead_id}, {"status": "OPEN", "lost_reason": None}
+    )
+    if not updated:
+        raise HTTPException(status_code=502, detail="No se pudo revertir el descarte")
+    await pg_insert(
+        "activities",
+        {
+            "lead_id": lead_id,
+            "activity_type": "STAGE_CHANGED",
+            "actor_type": "USER",
+            "subject": "Descarte revertido",
+            "body": f"Edwin revirtio el descarte de {nombre_empresa or 'este lead'} desde la Torre de Control.",
+            "metadata": {"canal": "whatsapp", "origen": "torre-control", "result": "undo"},
+        },
+    )
+    return {"ok": True, "lead_id": lead_id, "status": "OPEN"}
+
+
+class _LeadNoteIn(BaseModel):
+    """Nota libre de operador sobre un lead (se guarda como activity)."""
+
+    text: str
+
+
+@router.post("/leads/{lead_id}/note", dependencies=[Depends(_require_operator)])
+async def lead_note(lead_id: str, payload: _LeadNoteIn) -> dict[str, Any]:
+    """Añade una nota de operador al lead (activity NOTE). El texto va en body
+    y en metadata queda el origen; actor_type=operator para distinguir la nota
+    manual de los eventos del sistema."""
+    from app.core.postgrest_client import pg_insert, pg_select
+
+    texto = (payload.text or "").strip()
+    if not texto:
+        raise HTTPException(status_code=422, detail="La nota no puede estar vacía")
+
+    filas = await pg_select(
+        "leads", columns="id,status,companies(name)", filters={"id": lead_id}, limit=1
+    )
+    if not filas:
+        raise HTTPException(status_code=404, detail=f"Lead {lead_id} no encontrado")
+
+    insertados = await pg_insert(
+        "activities",
+        {
+            "lead_id": lead_id,
+            "activity_type": "NOTE",
+            "actor_type": "operator",
+            "subject": "Nota de operador",
+            "body": texto,
+            "metadata": {"origen": "torre-control", "tipo": "nota"},
+        },
+    )
+    if not insertados:
+        logger.error("lead_note_insert_failed", lead_id=lead_id)
+        raise HTTPException(
+            status_code=502, detail="No se pudo guardar la nota en Supabase"
+        )
+
+    logger.info("lead_note_saved", lead_id=lead_id)
+    return {"ok": True, "lead_id": lead_id, "note": texto}
+
+
+async def _enrich_inline(company_id: str) -> dict[str, Any]:
+    """Enriquece UNA sola empresa en línea (sin cola de jobs).
+
+    Requiere sesión SQLAlchemy (DB_URL configurada). Devuelve el outcome
+    resumido: emails/tel/redes encontrados, señales y el DQS resultante.
+    """
+    from app.core.database import session_scope
+
+    async with session_scope() as session:
+        if session is None:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "No hay cola de jobs disponible ni sesión de BD para "
+                    "enriquecer en línea (¿falta DB_URL en este entorno?)."
+                ),
+            )
+        from app.repositories.company import CompanyRepository
+        from app.services.enrichment_svc import EnrichmentService
+
+        try:
+            company_id_uuid = uuid.UUID(company_id)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"Empresa {company_id} no encontrada"
+            ) from exc
+
+        company = await CompanyRepository(session).get(company_id_uuid)
+        if company is None:
+            raise HTTPException(
+                status_code=404, detail=f"Empresa {company_id} no encontrada"
+            )
+
+        try:
+            outcome = await EnrichmentService(session).enrich(company)
+        except Exception as exc:  # noqa: BLE001 - error claro, no 500 opaco
+            logger.error(
+                "torre_enrich_inline_failed",
+                company_id=company_id,
+                error=f"{type(exc).__name__}: {exc}"[:300],
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=f"Error enriqueciendo la empresa: {exc}",
+            ) from exc
+
+        # session_scope hace commit al salir del contexto: el outcome se
+        # construye con los valores ya persistidos.
+        return {
+            "ok": True,
+            "queued": False,
+            "company_id": str(outcome.company_id),
+            "outcome": {
+                "emails_found": outcome.emails_found,
+                "phones_found": outcome.phones_found,
+                "socials_found": outcome.socials_found,
+                "signals": outcome.signals,
+                "crawled": outcome.crawled,
+                "error": outcome.error,
+                "dqs": getattr(company, "data_quality_score", None),
+                "email": getattr(company, "email", None),
+            },
+        }
+
+
+@router.post("/companies/{company_id}/enrich", dependencies=[Depends(_require_operator)])
+async def torre_enrich_company(company_id: str) -> dict[str, Any]:
+    """Enriquece una empresa desde la Torre (trabajo manual).
+
+    Intenta primero encolar el job ENRICHMENT (mismo patrón que leads.py:
+    fila en `jobs` vía PostgREST + get_job_queue). Si la cola no está
+    disponible (sin backend de cola, sin handler registrado, fallo de
+    escritura), ejecuta EnrichmentService.enrich INLINE sobre esa única
+    empresa y devuelve el outcome resumido (emails/tel/redes/signals + DQS).
+    Si nada es posible, responde un error claro sin bloquear.
+    """
+    from app.core.supabase_http import select as pg_select
+
+    filas = await pg_select(
+        "companies",
+        columns="id,name,website,last_enriched_at",
+        filters={"id": company_id},
+        limit=1,
+    )
+    if not filas:
+        raise HTTPException(
+            status_code=404, detail=f"Empresa {company_id} no encontrada"
+        )
+    nombre = (filas[0].get("name") or "").strip() or company_id
+
+    # Intento A: encolar el job ENRICHMENT (patrón existente en leads.py).
+    payload = {"company_ids": [company_id]}
+    try:
+        from app.core.container import get_job_queue
+        from app.core.enums import JobType
+        from app.core.supabase_http import insert as pg_insert
+
+        job_id = str(uuid.uuid4())
+        creado = await pg_insert(
+            "jobs",
+            {
+                "id": job_id,
+                "job_type": JobType.ENRICHMENT.value,
+                "payload": payload,
+                "status": "QUEUED",
+                "progress_total": 1,
+                "created_at": datetime.now(UTC).isoformat(),
+            },
+        )
+        if creado:
+            try:
+                await get_job_queue().enqueue(JobType.ENRICHMENT, payload, job_id=job_id)
+            except Exception:
+                # La cola no aceptó el job: borrar la fila para que el worker
+                # externo no lo re-enriquezca encima del fallback inline.
+                try:
+                    from app.core.postgrest_client import pg_delete
+
+                    await pg_delete("jobs", {"id": job_id})
+                except Exception:  # noqa: BLE001
+                    pass
+                raise
+            logger.info("torre_enrich_queued", company_id=company_id, job_id=job_id)
+            return {
+                "ok": True,
+                "queued": True,
+                "job_id": job_id,
+                "company_id": company_id,
+                "company": nombre,
+            }
+    except Exception as exc:  # noqa: BLE001 - la cola puede no existir aquí
+        logger.warning(
+            "torre_enrich_enqueue_failed",
+            company_id=company_id,
+            error=f"{type(exc).__name__}: {exc}"[:200],
+        )
+
+    # Intento B: sin cola usable, enriquecer en línea (una sola empresa).
+    return await _enrich_inline(company_id)
 
 
 @router.get("/fichas-audit", dependencies=[Depends(_require_operator)])
